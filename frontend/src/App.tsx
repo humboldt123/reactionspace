@@ -127,6 +127,25 @@ function App() {
     }
   }, []);
 
+  const handleBatchItemDragEnd = useCallback(async (updates: Array<{ id: string; x: number; y: number }>) => {
+    // Update local state immediately for all items
+    setItems((prev) =>
+      prev.map((item) => {
+        const update = updates.find(u => u.id === item.id);
+        return update ? { ...item, x: update.x, y: update.y, positionLocked: true } : item;
+      })
+    );
+
+    // Update via API (in parallel)
+    try {
+      await Promise.all(
+        updates.map(update => api.updateItemPosition(update.id, update.x, update.y))
+      );
+    } catch (error) {
+      console.error('Failed to update item positions:', error);
+    }
+  }, []);
+
   // Process upload queue
   useEffect(() => {
     const processQueue = async () => {
@@ -698,6 +717,7 @@ function App() {
       <InfiniteCanvas
         items={items}
         onItemDragEnd={handleItemDragEnd}
+        onBatchItemDragEnd={handleBatchItemDragEnd}
         onItemClick={handleItemClick}
         deletingItemId={deletingItemId}
         onDeleteAnimationComplete={handleDeleteAnimationComplete}

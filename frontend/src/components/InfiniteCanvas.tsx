@@ -1,10 +1,11 @@
 import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
-import { Stage, Layer } from 'react-konva';
+import { Stage, Layer, Rect } from 'react-konva';
 import { MediaItem } from './MediaItem';
 import type { MediaItem as MediaItemType, ViewportBounds } from '../types';
 import { useCanvasState } from '../hooks/useCanvasState';
 import { SpatialIndex } from '../utils/spatial';
 import { api } from '../api/client';
+import Konva from 'konva';
 
 interface InfiniteCanvasProps {
   items: MediaItemType[];
@@ -12,15 +13,28 @@ interface InfiniteCanvasProps {
   onItemClick?: (id: string) => void;
   deletingItemId: string | null;
   onDeleteAnimationComplete: (id: string) => void;
+  onBatchItemDragEnd?: (updates: Array<{ id: string; x: number; y: number }>) => void;
 }
 
-export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItemId, onDeleteAnimationComplete }: InfiniteCanvasProps) {
+interface SelectionBox {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItemId, onDeleteAnimationComplete, onBatchItemDragEnd }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
   const { canvasState, handleWheel, handleDragEnd, panTo } = useCanvasState();
   const [isInitialized, setIsInitialized] = useState(false);
   const [storageInfo, setStorageInfo] = useState<{ used_bytes: number; limit_bytes: number; item_count: number } | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Center the canvas on initial load
   useEffect(() => {
@@ -84,6 +98,194 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
     handleDragEnd(e.target.x(), e.target.y());
   }, [handleDragEnd]);
 
+  // Handle when an item starts being dragged
+  const handleItemDragStart = useCallback((id: string) => {
+    setDraggedItemId(id);
+    setDragOffset({ x: 0, y: 0 });
+  }, []);
+
+  // Handle when an item is being dragged (called during drag)
+  const handleItemDragMove = useCallback((id: string, newX: number, newY: number) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    // Calculate the offset from original position
+    const deltaX = newX - item.x;
+    const deltaY = newY - item.y;
+
+    // Update drag offset for other selected items to follow
+    setDragOffset({ x: deltaX, y: deltaY });
+  }, [items]);
+
+  // Handle dragging of a single item (could be part of a group)
+  const handleItemDragEnd = useCallback((id: string, newX: number, newY: number) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    // If this item is part of a selection, move all selected items
+    if (selectedItemIds.has(id) && selectedItemIds.size > 1) {
+      const deltaX = newX - item.x;
+      const deltaY = newY - item.y;
+
+      const updates = Array.from(selectedItemIds).map(selectedId => {
+        const selectedItem = items.find(i => i.id === selectedId);
+        if (!selectedItem) return null;
+
+        return {
+          id: selectedId,
+          x: selectedItem.x + deltaX,
+          y: selectedItem.y + deltaY,
+        };
+      }).filter(Boolean) as Array<{ id: string; x: number; y: number }>;
+
+      // Use batch update if available
+      if (onBatchItemDragEnd) {
+        onBatchItemDragEnd(updates);
+      } else {
+        // Fallback to individual updates
+        updates.forEach(update => {
+          onItemDragEnd(update.id, update.x, update.y);
+        });
+      }
+    } else {
+      // Single item drag
+      onItemDragEnd(id, newX, newY);
+    }
+
+    // Clear drag state
+    setDraggedItemId(null);
+    setDragOffset({ x: 0, y: 0 });
+  }, [items, selectedItemIds, onItemDragEnd, onBatchItemDragEnd]);
+
+  // Handle mouse down on stage for selection
+  const handleStageMouseDown = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    // Only start selection if clicking on empty canvas (Layer, not an item)
+    const clickedOnEmpty = e.target === layerRef.current || e.target === stageRef.current;
+
+    if (!clickedOnEmpty) {
+      return;
+    }
+
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    // Get pointer position in canvas coordinates
+    const pos = stage.getPointerPosition();
+    if (!pos) return;
+
+    // Convert screen coordinates to canvas coordinates
+    const x = (pos.x - canvasState.x) / canvasState.scale;
+    const y = (pos.y - canvasState.y) / canvasState.scale;
+
+    setIsSelecting(true);
+    setSelectionBox({ x1: x, y1: y, x2: x, y2: y });
+
+    // Disable stage dragging while selecting
+    stage.draggable(false);
+  }, [canvasState.x, canvasState.y, canvasState.scale]);
+
+  // Handle mouse move for selection
+  const handleStageMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (!isSelecting || !selectionBox) return;
+
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const pos = stage.getPointerPosition();
+    if (!pos) return;
+
+    // Convert screen coordinates to canvas coordinates
+    const x = (pos.x - canvasState.x) / canvasState.scale;
+    const y = (pos.y - canvasState.y) / canvasState.scale;
+
+    setSelectionBox(prev => prev ? { ...prev, x2: x, y2: y } : null);
+
+    // Calculate which items are in the selection box
+    if (selectionBox) {
+      const minX = Math.min(selectionBox.x1, x);
+      const maxX = Math.max(selectionBox.x1, x);
+      const minY = Math.min(selectionBox.y1, y);
+      const maxY = Math.max(selectionBox.y1, y);
+
+      const selected = new Set<string>();
+      items.forEach(item => {
+        // Check if item intersects with selection box
+        const itemMinX = item.x;
+        const itemMaxX = item.x + item.width;
+        const itemMinY = item.y;
+        const itemMaxY = item.y + item.height;
+
+        if (itemMaxX >= minX && itemMinX <= maxX &&
+            itemMaxY >= minY && itemMinY <= maxY) {
+          selected.add(item.id);
+        }
+      });
+
+      setSelectedItemIds(selected);
+    }
+  }, [isSelecting, selectionBox, items, canvasState.x, canvasState.y, canvasState.scale]);
+
+  // Handle mouse up to finish selection
+  const handleStageMouseUp = useCallback(() => {
+    if (isSelecting) {
+      setIsSelecting(false);
+      setSelectionBox(null);
+      // Keep selectedItemIds - they stay selected!
+
+      // Re-enable stage dragging
+      const stage = stageRef.current;
+      if (stage) {
+        stage.draggable(true);
+      }
+    }
+  }, [isSelecting]);
+
+  // Handle clicking on items or empty space
+  const handleItemClickInternal = useCallback((id: string, e?: MouseEvent) => {
+    const isMultiSelect = e && (e.metaKey || e.ctrlKey);
+
+    if (isMultiSelect) {
+      // Cmd/Ctrl+click: toggle this item in selection
+      setSelectedItemIds(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(id)) {
+          newSet.delete(id);
+        } else {
+          newSet.add(id);
+        }
+        return newSet;
+      });
+    } else {
+      // Regular click: select only this item or open detail panel
+      if (onItemClick) {
+        onItemClick(id);
+      }
+      // Also select it
+      setSelectedItemIds(new Set([id]));
+    }
+  }, [onItemClick]);
+
+  // Clear selection when clicking on empty space (not during selection)
+  const handleStageClick = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    const clickedOnEmpty = e.target === layerRef.current || e.target === stageRef.current;
+    if (clickedOnEmpty) {
+      setSelectedItemIds(new Set());
+    }
+  }, []);
+
+  // Handle Delete key to delete selected items
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItemIds.size > 0) {
+        // TODO: Implement batch delete
+        console.log('Delete selected items:', Array.from(selectedItemIds));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedItemIds]);
+
   // calculate grid properties based on zoom
   const gridScale = Math.pow(canvasState.scale, 0.3); // scale slowly (cube root!)
   const gridSize = 40 * gridScale;
@@ -116,50 +318,111 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
         scaleX={canvasState.scale}
         scaleY={canvasState.scale}
         onDragEnd={handleStageDragEnd}
+        onMouseDown={handleStageMouseDown}
+        onMouseMove={handleStageMouseMove}
+        onMouseUp={handleStageMouseUp}
+        onClick={handleStageClick}
       >
         <Layer ref={layerRef}>
-          {visibleItems.map((item) => (
-            <MediaItem
-              key={item.id}
-              item={item}
-              onDragEnd={onItemDragEnd}
-              onClick={onItemClick}
-              isDeleting={deletingItemId === item.id}
-              onDeleteAnimationComplete={onDeleteAnimationComplete}
+          {visibleItems.map((item) => {
+            // Calculate if this item should follow the dragged item
+            const isFollowing = selectedItemIds.has(item.id) &&
+                               draggedItemId !== null &&
+                               draggedItemId !== item.id &&
+                               selectedItemIds.has(draggedItemId);
+
+            // Calculate the visual offset for following items
+            const visualOffset = isFollowing ? dragOffset : { x: 0, y: 0 };
+
+            return (
+              <MediaItem
+                key={item.id}
+                item={item}
+                onDragStart={handleItemDragStart}
+                onDragMove={handleItemDragMove}
+                onDragEnd={handleItemDragEnd}
+                onClick={handleItemClickInternal}
+                isDeleting={deletingItemId === item.id}
+                onDeleteAnimationComplete={onDeleteAnimationComplete}
+                isSelected={selectedItemIds.has(item.id)}
+                isDragFollowing={isFollowing}
+                visualOffset={visualOffset}
+              />
+            );
+          })}
+
+          {/* Selection rectangle */}
+          {selectionBox && (
+            <Rect
+              x={Math.min(selectionBox.x1, selectionBox.x2)}
+              y={Math.min(selectionBox.y1, selectionBox.y2)}
+              width={Math.abs(selectionBox.x2 - selectionBox.x1)}
+              height={Math.abs(selectionBox.y2 - selectionBox.y1)}
+              fill="rgba(94, 129, 244, 0.1)"
+              stroke="rgba(94, 129, 244, 0.8)"
+              strokeWidth={1 / canvasState.scale}
+              listening={false}
             />
-          ))}
+          )}
         </Layer>
       </Stage>
 
       {/* Canvas info overlay */}
-      {storageInfo && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 20,
-            right: 20,
-            padding: '8px 12px',
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-            borderRadius: 6,
-            fontSize: '0.85em',
-            color: 'var(--text-secondary)',
-            pointerEvents: 'none',
-            fontFamily: 'Palatino',
-          }}
-        >
-          {(() => {
-            const usedMB = storageInfo.used_bytes / (1024 * 1024);
-            const limitMB = storageInfo.limit_bytes / (1024 * 1024);
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 20,
+          right: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          alignItems: 'flex-end',
+          pointerEvents: 'none',
+        }}
+      >
+        {/* Selection count */}
+        {selectedItemIds.size > 0 && (
+          <div
+            style={{
+              padding: '8px 12px',
+              backgroundColor: 'rgba(94, 129, 244, 0.9)',
+              border: '1px solid rgba(94, 129, 244, 1)',
+              borderRadius: 6,
+              fontSize: '0.85em',
+              color: 'white',
+              fontFamily: 'Palatino',
+            }}
+          >
+            {selectedItemIds.size} selected
+          </div>
+        )}
 
-            // format used storage and limit!
-            const usedDisplay = usedMB >= 1024 ? `${(usedMB / 1024).toFixed(1)} GB` : `${Math.round(usedMB)} MB`;
-            const limitDisplay = limitMB >= 1024 ? `${(limitMB / 1024).toFixed(1)} GB` : `${Math.round(limitMB)} MB`;
+        {/* Storage info */}
+        {storageInfo && (
+          <div
+            style={{
+              padding: '8px 12px',
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              fontSize: '0.85em',
+              color: 'var(--text-secondary)',
+              fontFamily: 'Palatino',
+            }}
+          >
+            {(() => {
+              const usedMB = storageInfo.used_bytes / (1024 * 1024);
+              const limitMB = storageInfo.limit_bytes / (1024 * 1024);
 
-            return `${storageInfo.item_count} items (${usedDisplay} / ${limitDisplay})`;
-          })()}
-        </div>
-      )}
+              // format used storage and limit!
+              const usedDisplay = usedMB >= 1024 ? `${(usedMB / 1024).toFixed(1)} GB` : `${Math.round(usedMB)} MB`;
+              const limitDisplay = limitMB >= 1024 ? `${(limitMB / 1024).toFixed(1)} GB` : `${Math.round(limitMB)} MB`;
+
+              return `${storageInfo.item_count} items (${usedDisplay} / ${limitDisplay})`;
+            })()}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

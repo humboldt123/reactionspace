@@ -5,13 +5,18 @@ import Konva from 'konva';
 
 interface MediaItemProps {
   item: MediaItemType;
+  onDragStart?: (id: string) => void;
+  onDragMove?: (id: string, x: number, y: number) => void;
   onDragEnd: (id: string, x: number, y: number) => void;
-  onClick?: (id: string) => void;
+  onClick?: (id: string, e?: MouseEvent) => void;
   isDeleting?: boolean;
   onDeleteAnimationComplete?: (id: string) => void;
+  isSelected?: boolean;
+  isDragFollowing?: boolean;
+  visualOffset?: { x: number; y: number };
 }
 
-export function MediaItem({ item, onDragEnd, onClick, isDeleting, onDeleteAnimationComplete }: MediaItemProps) {
+export function MediaItem({ item, onDragStart, onDragMove, onDragEnd, onClick, isDeleting, onDeleteAnimationComplete, isSelected, isDragFollowing, visualOffset = { x: 0, y: 0 } }: MediaItemProps) {
   const [image, setImage] = useState<HTMLImageElement | HTMLVideoElement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
@@ -149,10 +154,32 @@ export function MediaItem({ item, onDragEnd, onClick, isDeleting, onDeleteAnimat
     setIsDragging(true);
     setIsHovered(false); // Clear hover state when starting drag
 
+    // Notify parent that drag started
+    if (onDragStart) {
+      onDragStart(item.id);
+    }
+
     // Set grabbing cursor during drag
     const container = e.target.getStage()?.container();
     if (container) {
       container.style.cursor = 'grabbing';
+    }
+  };
+
+  const handleDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
+    // Get the group's position during drag
+    const group = e.target;
+
+    // The group's x() and y() now include the center offset we added
+    // Subtract the offset to get the top-left corner position
+    const centerX = item.width / 2;
+    const centerY = item.height / 2;
+    const newX = group.x() - centerX;
+    const newY = group.y() - centerY;
+
+    // Notify parent of new position during drag
+    if (onDragMove) {
+      onDragMove(item.id, newX, newY);
     }
   };
 
@@ -187,12 +214,19 @@ export function MediaItem({ item, onDragEnd, onClick, isDeleting, onDeleteAnimat
   return (
     <Group
       ref={groupRef}
-      x={item.x + centerX} // Add offset to compensate for center origin
-      y={item.y + centerY} // Add offset to compensate for center origin
-      draggable={!isDeleting}
+      x={item.x + centerX + visualOffset.x} // Add offset to compensate for center origin + visual drag offset
+      y={item.y + centerY + visualOffset.y} // Add offset to compensate for center origin + visual drag offset
+      draggable={!isDeleting && !isDragFollowing} // Disable dragging for following items
       onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
-      onClick={() => !isDragging && !isDeleting && onClick?.(item.id)}
+      onClick={(e) => {
+        if (!isDragging && !isDeleting && onClick) {
+          // Pass the native mouse event
+          const nativeEvent = e.evt;
+          onClick(item.id, nativeEvent);
+        }
+      }}
       onMouseEnter={(e) => {
         if (!isDragging && !isDeleting) {
           setIsHovered(true);
@@ -206,8 +240,22 @@ export function MediaItem({ item, onDragEnd, onClick, isDeleting, onDeleteAnimat
         if (container) container.style.cursor = 'grab';
       }}
     >
+      {/* Selection outline */}
+      {isSelected && (
+        <Rect
+          x={-2}
+          y={-2}
+          width={item.width + 4}
+          height={item.height + 4}
+          stroke="rgba(94, 129, 244, 1)"
+          strokeWidth={2}
+          cornerRadius={4}
+          listening={false}
+        />
+      )}
+
       {/* Subtle shadow on hover (not while dragging) */}
-      {isHovered && !isDragging && (
+      {isHovered && !isDragging && !isSelected && (
         <Rect
           x={-4}
           y={-4}
