@@ -434,7 +434,10 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
             }}
           >
             <div>type: {fileExtension}</div>
-            <div>size: {item.fileSize ? `${Math.round(item.fileSize / 1024)} KB` : 'Unknown'}</div>
+            <div>
+              size: {item.fileSize ? `${Math.round(item.fileSize / 1024)} KB` : 'Unknown'}
+              {fileExtension === 'gif' && item.previewVideoPath && ' (includes preview)'}
+            </div>
             <div>position: ({Math.round(item.x)}, {Math.round(item.y)})</div>
             <div>created: {new Date(item.createdAt).toLocaleDateString()}</div>
           </div>

@@ -63,7 +63,7 @@ async def upload_media(
     file_data = await file.read()
     file_size = len(file_data)
 
-    # Check file size limit
+    # Check file size limit (we'll check total size including preview later for GIFs)
     if file_size > max_file_size:
         max_size_mb = max_file_size / (1024 * 1024)
         raise HTTPException(
@@ -71,7 +71,7 @@ async def upload_media(
             detail=f"File too large. Maximum size is {max_size_mb:.0f}MB for {'Pro' if is_pro else 'Free'} accounts."
         )
 
-    # Check user storage limit
+    # Initial storage check (will check again with preview video size for GIFs)
     storage_info = await get_storage_info_internal(user_id)
     if storage_info['used_bytes'] + file_size > storage_limit:
         used_mb = storage_info['used_bytes'] / (1024 * 1024)
@@ -98,6 +98,7 @@ async def upload_media(
 
         # Convert GIF to MP4 for board preview
         preview_video_data = None
+        preview_video_size = 0
         mp4_temp_path = None
         if is_gif:
             try:
@@ -118,11 +119,25 @@ async def upload_media(
                 # Read the MP4 file
                 with open(mp4_temp_path, 'rb') as f:
                     preview_video_data = f.read()
+                    preview_video_size = len(preview_video_data)
 
-                print(f"Successfully converted GIF to MP4: {mp4_file_name}")
+                print(f"Successfully converted GIF to MP4: {mp4_file_name} ({preview_video_size} bytes)")
             except Exception as e:
                 print(f"Warning: Failed to convert GIF to MP4: {e}")
                 # Continue without video preview - will fall back to GIF
+
+        # For GIFs with preview videos, check total storage size
+        if preview_video_size > 0:
+            total_size = file_size + preview_video_size
+            storage_info = await get_storage_info_internal(user_id)
+            if storage_info['used_bytes'] + total_size > storage_limit:
+                used_mb = storage_info['used_bytes'] / (1024 * 1024)
+                limit_mb = storage_limit / (1024 * 1024)
+                total_mb = total_size / (1024 * 1024)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Storage limit exceeded. This upload ({total_mb:.1f}MB including preview) would exceed your limit. You're using {used_mb:.1f}MB of {limit_mb:.0f}MB."
+                )
 
         # Get actual dimensions and calculate display size
         actual_width, actual_height = 0, 0
@@ -265,6 +280,8 @@ async def upload_media(
             new_position = positions[-1]  # Last position is for new item
 
             # Create item in database
+            # For GIFs, store total size (original + preview video)
+            total_file_size = len(file_data) + preview_video_size
             item_create = MediaItemCreate(
                 name=ai_caption["name"],
                 description=ai_caption["description"],
@@ -273,7 +290,7 @@ async def upload_media(
                 thumbnail_path=file_url,  # For now, same as file_path
                 preview_video_path=preview_video_url,  # MP4 preview for GIFs
                 file_type=file_type,
-                file_size=len(file_data),  # Actual file size in bytes
+                file_size=total_file_size,  # Total size including preview video for GIFs
                 x=new_position[0],
                 y=new_position[1],
                 width=display_width,
@@ -384,6 +401,7 @@ async def upload_from_twitter(
 
             gif_path = None
             mp4_preview_path = None
+            mp4_preview_size = 0
 
             # Check if this is a Twitter GIF (which is stored as MP4)
             # Twitter GIFs are typically short, looping MP4s
@@ -518,6 +536,7 @@ async def upload_from_twitter(
                 try:
                     with open(mp4_preview_path, 'rb') as f:
                         mp4_data = f.read()
+                        mp4_preview_size = len(mp4_data)
 
                     preview_storage_path = f"reactions/{file_id}.mp4"
                     preview_video_url = await supabase_service.upload_file(
@@ -525,9 +544,10 @@ async def upload_from_twitter(
                         mp4_data,
                         "video/mp4"
                     )
-                    print(f"Uploaded MP4 preview to: {preview_video_url}")
+                    print(f"Uploaded MP4 preview to: {preview_video_url} ({mp4_preview_size} bytes)")
                 except Exception as e:
                     print(f"Warning: Failed to upload MP4 preview: {e}")
+                    mp4_preview_size = 0
 
             # CRITICAL SECTION: Use lock to prevent race conditions
             async with upload_lock:
@@ -555,6 +575,8 @@ async def upload_from_twitter(
                 new_position = positions[-1]
 
                 # Create item in database
+                # For GIFs, store total size (original + preview video)
+                total_file_size = len(file_data) + mp4_preview_size
                 item_create = MediaItemCreate(
                     name=ai_caption["name"],
                     description=ai_caption["description"],
@@ -563,7 +585,7 @@ async def upload_from_twitter(
                     thumbnail_path=file_url,
                     preview_video_path=preview_video_url,
                     file_type=file_type,
-                    file_size=len(file_data),
+                    file_size=total_file_size,  # Total size including preview video for GIFs
                     x=new_position[0],
                     y=new_position[1],
                     width=display_width,

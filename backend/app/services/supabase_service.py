@@ -61,6 +61,12 @@ class SupabaseService:
         result = query.execute()
         return [MediaItem(**item) for item in result.data]
 
+    async def get_all_items_global(self) -> List[MediaItem]:
+        """Get all media items across all users (for global storage calculation)."""
+        query = self.client.table("items").select("*")
+        result = query.execute()
+        return [MediaItem(**item) for item in result.data]
+
     async def get_item_by_id(self, item_id: str, user_id: Optional[str] = None) -> Optional[MediaItem]:
         """Get a single media item by ID (must belong to user or be public)."""
         query = self.client.table("items").select("*").eq("id", item_id)
@@ -199,36 +205,52 @@ class SupabaseService:
         return result.data
 
     async def delete_item(self, item_id: str, user_id: Optional[str] = None) -> None:
-        """Delete a media item and its file from storage, optionally filtered by user_id."""
-        # First, get the item to retrieve the file path
+        """Delete a media item and its files from storage (including preview video), optionally filtered by user_id."""
+        # First, get the item to retrieve the file paths
         item = await self.get_item_by_id(item_id, user_id)
         if not item:
             raise Exception("Item not found or permission denied")
 
-        # Extract storage path from file URL
-        # URL format: https://.../storage/v1/object/public/reactions/reactions/filename.ext
-        # We need: reactions/filename.ext
-        try:
-            file_path = item.file_path
-            if "/object/public/" in file_path:
+        # Helper function to extract storage path from URL
+        def extract_storage_path(url: str) -> Optional[str]:
+            if "/object/public/" in url:
                 # Extract path after bucket name
-                parts = file_path.split("/object/public/")
+                parts = url.split("/object/public/")
                 if len(parts) > 1:
-                    storage_path = parts[1].split("/", 1)[1] if "/" in parts[1] else parts[1]
-                else:
-                    storage_path = None
-            elif file_path.startswith("/uploads/"):
+                    return parts[1].split("/", 1)[1] if "/" in parts[1] else parts[1]
+            elif url.startswith("/uploads/"):
                 # Handle local file paths (shouldn't happen in Supabase mode, but just in case)
-                storage_path = file_path.replace("/uploads/", "")
-            else:
-                storage_path = None
+                return url.replace("/uploads/", "")
+            return None
 
-            # Delete file from storage
+        # Collect all files to delete
+        files_to_delete = []
+
+        # Main file
+        try:
+            storage_path = extract_storage_path(item.file_path)
             if storage_path:
-                self.client.storage.from_(settings.STORAGE_BUCKET).remove([storage_path])
+                files_to_delete.append(storage_path)
         except Exception as e:
-            # Log error but continue with database deletion
-            print(f"Warning: Failed to delete file from storage: {e}")
+            print(f"Warning: Failed to parse main file path: {e}")
+
+        # Preview video (for GIFs)
+        if item.preview_video_path:
+            try:
+                preview_path = extract_storage_path(item.preview_video_path)
+                if preview_path:
+                    files_to_delete.append(preview_path)
+            except Exception as e:
+                print(f"Warning: Failed to parse preview video path: {e}")
+
+        # Delete all files from storage
+        if files_to_delete:
+            try:
+                self.client.storage.from_(settings.STORAGE_BUCKET).remove(files_to_delete)
+                print(f"Deleted {len(files_to_delete)} file(s) from storage: {files_to_delete}")
+            except Exception as e:
+                # Log error but continue with database deletion
+                print(f"Warning: Failed to delete files from storage: {e}")
 
         # Delete from database
         query = self.client.table("items").delete().eq("id", item_id)

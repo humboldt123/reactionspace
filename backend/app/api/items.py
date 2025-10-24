@@ -30,7 +30,7 @@ async def get_storage_info_internal(user_id: Optional[str]) -> dict:
     limit_bytes = settings.STORAGE_LIMIT_PRO if is_pro else settings.STORAGE_LIMIT
 
     # Calculate global storage used across all users
-    all_items = await supabase_service.get_all_items(None)  # Get all items
+    all_items = await supabase_service.get_all_items_global()  # Get truly all items
     global_bytes = sum(item.file_size for item in all_items if item.file_size)
 
     # Warning if approaching Supabase free tier limit (1GB)

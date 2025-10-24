@@ -334,7 +334,7 @@ function MobileMediaItem({ item, onClick }: { item: MediaItem; onClick: () => vo
               bottom: 0,
               left: 0,
               right: 0,
-              padding: '4px 6px',
+              padding: '4px 8px',
               backgroundColor: 'rgba(0, 0, 0, 0.6)',
               backdropFilter: 'blur(4px)',
               fontFamily: 'monospace',

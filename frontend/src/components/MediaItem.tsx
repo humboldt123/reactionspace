@@ -254,9 +254,12 @@ export function MediaItem({ item, onDragEnd, onClick, isDeleting, onDeleteAnimat
           text={item.name}
           x={8}
           y={item.height - 12}
+          width={item.width - 16} // Add padding on both sides
           fontSize={8}
           fontFamily="monospace"
           fill="#f5f5f5"
+          ellipsis={true}
+          wrap="none"
         />
       )}
     </Group>
