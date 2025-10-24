@@ -25,7 +25,10 @@ class Settings:
 
     # Storage
     STORAGE_BUCKET: str = "reactions"
-    MAX_FILE_SIZE: int = 25 * 1024 * 1024  # 25MB
-    STORAGE_LIMIT: int = 500 * 1024 * 1024  # 500MB per user (Pro users will get more - TODO)
+    MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB for free users
+    MAX_FILE_SIZE_PRO: int = 200 * 1024 * 1024  # 200MB for pro users
+    STORAGE_LIMIT: int = 500 * 1024 * 1024  # 500MB per free user
+    STORAGE_LIMIT_PRO: int = 5 * 1024 * 1024 * 1024  # 5GB per pro user
+    GLOBAL_STORAGE_WARNING: int = 1 * 1024 * 1024 * 1024  # Warn when approaching 1GB free tier limit
 
 settings = Settings()

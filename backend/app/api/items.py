@@ -20,20 +20,37 @@ async def get_all_items(user_id: Optional[str] = Depends(get_current_user_id_opt
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def get_storage_info_internal(user_id: Optional[str]) -> dict:
+    """Internal helper to get storage info (used by other endpoints)."""
+    items = await supabase_service.get_all_items(user_id)
+    total_bytes = sum(item.file_size for item in items if item.file_size)
+
+    # TODO: Implement proper pro user check
+    is_pro = False
+    limit_bytes = settings.STORAGE_LIMIT_PRO if is_pro else settings.STORAGE_LIMIT
+
+    # Calculate global storage used across all users
+    all_items = await supabase_service.get_all_items(None)  # Get all items
+    global_bytes = sum(item.file_size for item in all_items if item.file_size)
+
+    # Warning if approaching Supabase free tier limit (1GB)
+    global_warning = global_bytes > settings.GLOBAL_STORAGE_WARNING * 0.8  # Warn at 80% of 1GB
+
+    return {
+        "used_bytes": total_bytes,
+        "limit_bytes": limit_bytes,
+        "item_count": len(items),
+        "is_pro": is_pro,
+        "global_used_bytes": global_bytes,
+        "global_warning": global_warning
+    }
+
+
 @router.get("/storage")
 async def get_storage_info(user_id: Optional[str] = Depends(get_current_user_id_optional)):
     """Get storage usage information for the current user."""
     try:
-        items = await supabase_service.get_all_items(user_id)
-
-        # Calculate total storage used from actual file sizes
-        total_bytes = sum(item.file_size for item in items if item.file_size)
-
-        return {
-            "used_bytes": total_bytes,
-            "limit_bytes": settings.STORAGE_LIMIT,
-            "item_count": len(items)
-        }
+        return await get_storage_info_internal(user_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

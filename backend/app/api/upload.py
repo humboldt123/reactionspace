@@ -16,6 +16,7 @@ from app.services.twitter_service import TwitterService
 from app.core.config import settings
 from app.core.auth import get_current_user_id
 from app.utils.aspect_ratio import calculate_aspect_ratio
+from app.api.items import get_storage_info_internal
 
 router = APIRouter()
 
@@ -48,15 +49,37 @@ async def upload_media(
     if not user_id:
         raise HTTPException(status_code=401, detail="You must be signed in to upload files")
 
+    # Check if user is pro (TODO: implement proper pro check)
+    is_pro = False
+    max_file_size = settings.MAX_FILE_SIZE_PRO if is_pro else settings.MAX_FILE_SIZE
+    storage_limit = settings.STORAGE_LIMIT_PRO if is_pro else settings.STORAGE_LIMIT
+
     # Validate file type
     allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4"]
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Invalid file type")
 
-    # Validate file size
+    # Read file data
     file_data = await file.read()
-    if len(file_data) > settings.MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large")
+    file_size = len(file_data)
+
+    # Check file size limit
+    if file_size > max_file_size:
+        max_size_mb = max_file_size / (1024 * 1024)
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {max_size_mb:.0f}MB for {'Pro' if is_pro else 'Free'} accounts."
+        )
+
+    # Check user storage limit
+    storage_info = await get_storage_info_internal(user_id)
+    if storage_info['used_bytes'] + file_size > storage_limit:
+        used_mb = storage_info['used_bytes'] / (1024 * 1024)
+        limit_mb = storage_limit / (1024 * 1024)
+        raise HTTPException(
+            status_code=413,
+            detail=f"Storage limit exceeded. You're using {used_mb:.1f}MB of {limit_mb:.0f}MB. Delete some items to free up space."
+        )
 
     try:
         # Generate unique filename
@@ -307,6 +330,11 @@ async def upload_from_twitter(
     if not user_id:
         raise HTTPException(status_code=401, detail="You must be signed in to upload files")
 
+    # Check if user is pro (TODO: implement proper pro check)
+    is_pro = False
+    max_file_size = settings.MAX_FILE_SIZE_PRO if is_pro else settings.MAX_FILE_SIZE
+    storage_limit = settings.STORAGE_LIMIT_PRO if is_pro else settings.STORAGE_LIMIT
+
     temp_path = None
     gif_path = None
 
@@ -317,6 +345,34 @@ async def upload_from_twitter(
         downloaded_files = TwitterService.download_from_twitter(request.url)
 
         print(f"Downloaded {len(downloaded_files)} file(s) from Twitter")
+
+        # Check total size of all files before processing
+        total_size = 0
+        for temp_path_check, _, _, _ in downloaded_files:
+            if os.path.exists(temp_path_check):
+                total_size += os.path.getsize(temp_path_check)
+
+        # Check if any single file exceeds limit
+        for temp_path_check, _, _, _ in downloaded_files:
+            if os.path.exists(temp_path_check):
+                file_size = os.path.getsize(temp_path_check)
+                if file_size > max_file_size:
+                    max_size_mb = max_file_size / (1024 * 1024)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. One or more files exceed {max_size_mb:.0f}MB limit for {'Pro' if is_pro else 'Free'} accounts."
+                    )
+
+        # Check user storage limit
+        storage_info = await get_storage_info_internal(user_id)
+        if storage_info['used_bytes'] + total_size > storage_limit:
+            used_mb = storage_info['used_bytes'] / (1024 * 1024)
+            limit_mb = storage_limit / (1024 * 1024)
+            total_mb = total_size / (1024 * 1024)
+            raise HTTPException(
+                status_code=413,
+                detail=f"Storage limit exceeded. This upload ({total_mb:.1f}MB) would exceed your limit. You're using {used_mb:.1f}MB of {limit_mb:.0f}MB."
+            )
 
         # Process each file and upload
         uploaded_items = []

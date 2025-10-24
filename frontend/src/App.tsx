@@ -46,6 +46,8 @@ function App() {
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [storageUsed, setStorageUsed] = useState(0);
   const [storageLimit, setStorageLimit] = useState(1024 * 1024 * 1024); // 1GB default
+  const [globalWarning, setGlobalWarning] = useState(false);
+  const [globalUsedBytes, setGlobalUsedBytes] = useState(0);
   const isMobile = useIsMobile();
   const { user, signOut } = useAuth();
 
@@ -67,6 +69,8 @@ function App() {
     api.getStorage().then(storage => {
       setStorageUsed(storage.used_bytes);
       setStorageLimit(storage.limit_bytes);
+      setGlobalWarning(storage.global_warning || false);
+      setGlobalUsedBytes(storage.global_used_bytes || 0);
     }).catch(err => {
       console.error('Failed to load storage info:', err);
     });
@@ -78,6 +82,8 @@ function App() {
       api.getStorage().then(storage => {
         setStorageUsed(storage.used_bytes);
         setStorageLimit(storage.limit_bytes);
+        setGlobalWarning(storage.global_warning || false);
+        setGlobalUsedBytes(storage.global_used_bytes || 0);
       }).catch(err => {
         console.error('Failed to refresh storage info:', err);
       });
@@ -421,6 +427,8 @@ function App() {
             storageUsed={storageUsed}
             storageLimit={storageLimit}
             isDemoMode={isDemoMode}
+            globalWarning={globalWarning}
+            globalUsedBytes={globalUsedBytes}
           />
         )}
       </>
@@ -681,6 +689,8 @@ function App() {
           storageUsed={storageUsed}
           storageLimit={storageLimit}
           isDemoMode={isDemoMode}
+          globalWarning={globalWarning}
+          globalUsedBytes={globalUsedBytes}
         />
       )}
 

@@ -9,6 +9,8 @@ interface AccountSettingsProps {
   storageUsed: number; // in bytes
   storageLimit: number; // in bytes
   isDemoMode: boolean;
+  globalWarning?: boolean;
+  globalUsedBytes?: number;
 }
 
 export function AccountSettings({
@@ -19,6 +21,8 @@ export function AccountSettings({
   storageUsed,
   storageLimit,
   isDemoMode,
+  globalWarning,
+  globalUsedBytes,
 }: AccountSettingsProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -145,6 +149,21 @@ export function AccountSettings({
               transition: 'width 0.3s ease',
             }} />
           </div>
+
+          {/* Global Storage Warning */}
+          {globalWarning && globalUsedBytes && (
+            <div style={{
+              marginTop: 8,
+              padding: '8px 12px',
+              backgroundColor: '#f59e0b20',
+              border: '1px solid #f59e0b',
+              borderRadius: 4,
+              fontSize: '0.75em',
+              color: '#f59e0b',
+            }}>
+              ⚠️ Global storage approaching Supabase free tier limit (1GB). Currently at {(globalUsedBytes / (1024 * 1024 * 1024)).toFixed(2)}GB.
+            </div>
+          )}
         </div>
 
         {/* About */}
