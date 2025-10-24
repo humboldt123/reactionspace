@@ -4,9 +4,11 @@ import { SearchModal } from './components/SearchModal';
 import { DetailPanel } from './components/DetailPanel';
 import { UploadZone } from './components/UploadZone';
 import { AuthButton } from './components/AuthButton';
+import { AccountSettings } from './components/AccountSettings';
 import { MobileView } from './components/MobileView';
 import { TwitterLinkBar } from './components/TwitterLinkBar';
 import { useIsMobile } from './hooks/useIsMobile';
+import { useAuth } from './contexts/AuthContext';
 import type { MediaItem } from './types';
 import { api } from './api/client';
 
@@ -24,6 +26,12 @@ interface TwitterUploadStatus {
   count?: number;
 }
 
+interface PasteConfirmation {
+  type: 'files' | 'twitter';
+  data: File[] | string;
+  count?: number;
+}
+
 function App() {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -33,9 +41,15 @@ function App() {
   const [twitterUploadStatus, setTwitterUploadStatus] = useState<TwitterUploadStatus | null>(null);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [pasteConfirm, setPasteConfirm] = useState<PasteConfirmation | null>(null);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [storageUsed, setStorageUsed] = useState(0);
+  const [storageLimit, setStorageLimit] = useState(1024 * 1024 * 1024); // 1GB default
   const isMobile = useIsMobile();
+  const { user, signOut } = useAuth();
 
-  // Load config and items on mount
+  // Load config, items, and storage on mount
   useEffect(() => {
     // Fetch config
     api.getConfig().then(config => {
@@ -48,7 +62,27 @@ function App() {
     api.getItems().then(setItems).catch(err => {
       console.error('Failed to load items:', err);
     });
+
+    // Fetch storage info
+    api.getStorage().then(storage => {
+      setStorageUsed(storage.used_bytes);
+      setStorageLimit(storage.limit_bytes);
+    }).catch(err => {
+      console.error('Failed to load storage info:', err);
+    });
   }, []);
+
+  // Refresh storage info when items change
+  useEffect(() => {
+    if (user) {
+      api.getStorage().then(storage => {
+        setStorageUsed(storage.used_bytes);
+        setStorageLimit(storage.limit_bytes);
+      }).catch(err => {
+        console.error('Failed to refresh storage info:', err);
+      });
+    }
+  }, [items.length, user]);
 
   // Handle Cmd+K / Ctrl+K to open search, Enter to open Twitter link bar
   useEffect(() => {
@@ -137,6 +171,13 @@ function App() {
   }, [uploadQueue]);
 
   const handleUpload = useCallback(async (files: File[]) => {
+    // Check if user is signed in
+    if (!user) {
+      setAuthError('Please sign in to upload files');
+      setTimeout(() => setAuthError(null), 5000);
+      return;
+    }
+
     // Add all files to the queue
     const newQueueItems: UploadQueueItem[] = files.map(file => ({
       file,
@@ -144,7 +185,7 @@ function App() {
     }));
 
     setUploadQueue(prev => [...prev, ...newQueueItems]);
-  }, []);
+  }, [user]);
 
   const handleSelectSearchResult = useCallback((item: MediaItem) => {
     setSelectedItem(item);
@@ -192,6 +233,14 @@ function App() {
   }, []);
 
   const handleTwitterLinkSubmit = useCallback(async (url: string) => {
+    // Check if user is signed in
+    if (!user) {
+      setAuthError('Please sign in to upload files');
+      setIsTwitterLinkBarOpen(false);
+      setTimeout(() => setAuthError(null), 5000);
+      return;
+    }
+
     // Close the modal immediately
     setIsTwitterLinkBarOpen(false);
 
@@ -235,11 +284,117 @@ function App() {
     }
   }, []);
 
+  // Handle clipboard paste (Cmd+V / Ctrl+V)
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      // Ignore if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      // Check if clipboard contains text (might be a Twitter link)
+      const textItem = Array.from(items).find(item => item.type === 'text/plain');
+      if (textItem) {
+        textItem.getAsString(async (text) => {
+          // Check if it's a Twitter/X URL
+          const twitterUrlPattern = /(https?:\/\/)?(www\.)?(twitter\.com|x\.com)\/[^\s]+/i;
+          if (twitterUrlPattern.test(text.trim())) {
+            e.preventDefault();
+
+            if (!user) {
+              setAuthError('Please sign in to upload files');
+              setTimeout(() => setAuthError(null), 5000);
+              return;
+            }
+
+            // Show confirmation dialog
+            setPasteConfirm({
+              type: 'twitter',
+              data: text.trim(),
+            });
+            return;
+          }
+        });
+      }
+
+      // Check if clipboard contains image/video files
+      const mediaItems = Array.from(items).filter(item =>
+        item.type.startsWith('image/') || item.type.startsWith('video/')
+      );
+
+      if (mediaItems.length > 0) {
+        e.preventDefault();
+
+        if (!user) {
+          setAuthError('Please sign in to upload files');
+          setTimeout(() => setAuthError(null), 5000);
+          return;
+        }
+
+        // Collect files
+        const files: File[] = [];
+        for (const item of mediaItems) {
+          const file = item.getAsFile();
+          if (file) {
+            files.push(file);
+          }
+        }
+
+        if (files.length > 0) {
+          // Show confirmation dialog
+          setPasteConfirm({
+            type: 'files',
+            data: files,
+            count: files.length,
+          });
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [user]);
+
+  const handlePasteConfirm = useCallback(async () => {
+    if (!pasteConfirm) return;
+
+    if (pasteConfirm.type === 'twitter') {
+      await handleTwitterLinkSubmit(pasteConfirm.data as string);
+    } else if (pasteConfirm.type === 'files') {
+      await handleUpload(pasteConfirm.data as File[]);
+    }
+
+    setPasteConfirm(null);
+  }, [pasteConfirm, handleUpload, handleTwitterLinkSubmit]);
+
+  const handlePasteCancel = useCallback(() => {
+    setPasteConfirm(null);
+  }, []);
+
+  const handleDeleteAccount = useCallback(async () => {
+    try {
+      await api.deleteAccount();
+      await signOut();
+      setShowAccountSettings(false);
+      setItems([]);
+    } catch (error) {
+      console.error('Failed to delete account:', error);
+      alert('Failed to delete account. Please try again.');
+    }
+  }, [signOut]);
+
   // Render mobile view if on mobile
   if (isMobile) {
     return (
       <>
-        <MobileView items={items} onItemClick={handleItemClick} />
+        <MobileView
+          items={items}
+          onItemClick={handleItemClick}
+          onAccountClick={() => setShowAccountSettings(true)}
+        />
 
         {/* Detail Panel */}
         <DetailPanel
@@ -252,6 +407,22 @@ function App() {
             setSelectedItem(null);
           }}
         />
+
+        {/* Account Settings */}
+        {showAccountSettings && user && (
+          <AccountSettings
+            user={user}
+            onClose={() => setShowAccountSettings(false)}
+            onSignOut={async () => {
+              await signOut();
+              setShowAccountSettings(false);
+            }}
+            onDeleteAccount={handleDeleteAccount}
+            storageUsed={storageUsed}
+            storageLimit={storageLimit}
+            isDemoMode={isDemoMode}
+          />
+        )}
       </>
     );
   }
@@ -261,6 +432,82 @@ function App() {
     <div style={{ width: '100vw', height: '100vh', position: 'relative', backgroundColor: 'var(--bg-primary)' }}>
       {/* Upload Zone */}
       <UploadZone onUpload={handleUpload} isUploading={uploadQueue.length > 0} />
+
+      {/* Auth Error Message */}
+      {authError && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '12px 20px',
+            backgroundColor: '#ef4444',
+            color: 'white',
+            borderRadius: 6,
+            zIndex: 1000,
+            fontSize: '0.9em',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+          }}
+        >
+          {authError}
+        </div>
+      )}
+
+      {/* Paste Confirmation Dialog */}
+      {pasteConfirm && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={handlePasteCancel}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 2000,
+            }}
+          />
+
+          {/* Dialog */}
+          <div
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '90%',
+              maxWidth: '400px',
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              padding: '20px',
+              zIndex: 2001,
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <h3 style={{ marginTop: 0, fontSize: '1.1em' }}>
+              {pasteConfirm.type === 'twitter' ? 'Upload from Twitter?' : 'Upload Files?'}
+            </h3>
+            <p style={{ margin: '12px 0', color: 'var(--text-secondary)' }}>
+              {pasteConfirm.type === 'twitter'
+                ? 'Download and upload media from this tweet?'
+                : `Upload ${pasteConfirm.count} file${pasteConfirm.count === 1 ? '' : 's'} from clipboard?`}
+            </p>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button onClick={handlePasteCancel}>Cancel</button>
+              <button
+                onClick={handlePasteConfirm}
+                style={{ backgroundColor: 'var(--accent)', color: 'var(--text-primary)' }}
+              >
+                Upload
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Upload Queue Status */}
       {(uploadQueue.length > 0 || twitterUploadStatus) && (
@@ -417,9 +664,25 @@ function App() {
               ⌘K
             </kbd>
           </button>
-          <AuthButton />
+          <AuthButton onAccountClick={() => setShowAccountSettings(true)} />
         </div>
       </header>
+
+      {/* Account Settings */}
+      {showAccountSettings && user && (
+        <AccountSettings
+          user={user}
+          onClose={() => setShowAccountSettings(false)}
+          onSignOut={async () => {
+            await signOut();
+            setShowAccountSettings(false);
+          }}
+          onDeleteAccount={handleDeleteAccount}
+          storageUsed={storageUsed}
+          storageLimit={storageLimit}
+          isDemoMode={isDemoMode}
+        />
+      )}
 
       {/* Canvas */}
       <InfiniteCanvas

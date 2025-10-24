@@ -181,3 +181,33 @@ async def delete_item(
         return {"message": "Item deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/account")
+async def delete_account(user_id: Optional[str] = Depends(get_current_user_id)):
+    """Delete the current user's account and all associated data."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    try:
+        # Get all user's items
+        items = await supabase_service.get_all_items(user_id)
+
+        # Delete all items (this will also delete files from storage)
+        for item in items:
+            try:
+                await supabase_service.delete_item(item.id, user_id)
+            except Exception as e:
+                print(f"Error deleting item {item.id}: {e}")
+                # Continue deleting other items even if one fails
+
+        # Note: We don't delete the user from Supabase Auth here
+        # That should be done through Supabase's user management
+        # For now, just delete all their data
+
+        return {
+            "message": "Account data deleted successfully",
+            "items_deleted": len(items)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")

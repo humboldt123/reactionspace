@@ -8,9 +8,10 @@ import { FaGoogle } from 'react-icons/fa';
 interface MobileViewProps {
   items: MediaItem[];
   onItemClick?: (id: string) => void;
+  onAccountClick?: () => void;
 }
 
-export function MobileView({ items, onItemClick }: MobileViewProps) {
+export function MobileView({ items, onItemClick, onAccountClick }: MobileViewProps) {
   const { user, signInWithGoogle } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredItems, setFilteredItems] = useState<MediaItem[]>(items);
@@ -145,7 +146,7 @@ export function MobileView({ items, onItemClick }: MobileViewProps) {
             color: 'var(--text-primary)',
           }}
         />
-        <AuthButton />
+        <AuthButton onAccountClick={onAccountClick} />
       </div>
 
       {/* Media list */}

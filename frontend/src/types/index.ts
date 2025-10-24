@@ -3,7 +3,7 @@ export type MediaItem = {
   id: string;
   name?: string;
   description?: string;
-  caption?: string; // Searchable tags/description of what's in the media
+  keywords?: string; // Searchable tags/keywords for what's in the media
   filePath: string;
   thumbnailPath: string;
   previewVideoPath?: string; // MP4 preview for GIFs (for board view)

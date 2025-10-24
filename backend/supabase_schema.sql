@@ -7,7 +7,7 @@ CREATE TABLE items (
     user_id UUID,  -- For future auth
     name TEXT,
     description TEXT,
-    caption TEXT,  -- Searchable tags/keywords
+    keywords TEXT,  -- Searchable tags/keywords
     file_path TEXT NOT NULL,
     thumbnail_path TEXT NOT NULL,
     file_type TEXT NOT NULL CHECK (file_type IN ('image', 'video')),

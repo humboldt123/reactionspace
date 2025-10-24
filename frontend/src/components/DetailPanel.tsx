@@ -11,22 +11,26 @@ interface DetailPanelProps {
 
 export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelProps) {
   const [isEditingName, setIsEditingName] = useState(false);
-  const [isEditingCaption, setIsEditingCaption] = useState(false);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [isEditingKeywords, setIsEditingKeywords] = useState(false);
   const [editedName, setEditedName] = useState('');
-  const [editedCaption, setEditedCaption] = useState('');
+  const [editedDescription, setEditedDescription] = useState('');
+  const [editedKeywords, setEditedKeywords] = useState('');
   const [isHoveringMedia, setIsHoveringMedia] = useState(false);
   const [downloadFilename, setDownloadFilename] = useState('');
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const captionInputRef = useRef<HTMLInputElement>(null);
+  const descriptionInputRef = useRef<HTMLInputElement>(null);
+  const keywordsInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (item) {
       setEditedName(item.name || '');
-      setEditedCaption(item.caption || '');
+      setEditedDescription(item.description || '');
+      setEditedKeywords(item.keywords || '');
       setDownloadFilename(item.name || 'reaction');
       setIsMuted(true); // Reset to muted when opening new item
     }
@@ -40,11 +44,18 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
   }, [isEditingName]);
 
   useEffect(() => {
-    if (isEditingCaption && captionInputRef.current) {
-      captionInputRef.current.focus();
-      captionInputRef.current.select();
+    if (isEditingDescription && descriptionInputRef.current) {
+      descriptionInputRef.current.focus();
+      descriptionInputRef.current.select();
     }
-  }, [isEditingCaption]);
+  }, [isEditingDescription]);
+
+  useEffect(() => {
+    if (isEditingKeywords && keywordsInputRef.current) {
+      keywordsInputRef.current.focus();
+      keywordsInputRef.current.select();
+    }
+  }, [isEditingKeywords]);
 
   // Play video when panel opens
   useEffect(() => {
@@ -63,7 +74,7 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
   // Handle ESC key to close panel
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isEditingName && !isEditingCaption && !showDownloadDialog && !showDeleteConfirm) {
+      if (e.key === 'Escape' && !isEditingName && !isEditingDescription && !isEditingKeywords && !showDownloadDialog && !showDeleteConfirm) {
         onClose();
       }
     };
@@ -72,7 +83,7 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [item, onClose, isEditingName, isEditingCaption, showDownloadDialog, showDeleteConfirm]);
+  }, [item, onClose, isEditingName, isEditingDescription, isEditingKeywords, showDownloadDialog, showDeleteConfirm]);
 
   if (!item) return null;
 
@@ -83,11 +94,18 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
     setIsEditingName(false);
   };
 
-  const handleCaptionSave = () => {
-    if (editedCaption !== item.caption) {
-      onUpdate(item.id, { caption: editedCaption });
+  const handleDescriptionSave = () => {
+    if (editedDescription !== item.description) {
+      onUpdate(item.id, { description: editedDescription });
     }
-    setIsEditingCaption(false);
+    setIsEditingDescription(false);
+  };
+
+  const handleKeywordsSave = () => {
+    if (editedKeywords !== item.keywords) {
+      onUpdate(item.id, { keywords: editedKeywords });
+    }
+    setIsEditingKeywords(false);
   };
 
   const handleDownload = async () => {
@@ -308,52 +326,100 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
             )}
           </div>
 
-          {/* Caption */}
+          {/* Description */}
           <div style={{ marginBottom: '16px' }}>
             <div style={{ fontSize: '0.85em', color: 'var(--text-secondary)', marginBottom: 4 }}>
-              Caption
+              Description
             </div>
-            {isEditingCaption ? (
+            {isEditingDescription ? (
               <input
-                ref={captionInputRef}
+                ref={descriptionInputRef}
                 type="text"
-                value={editedCaption}
-                onChange={(e) => setEditedCaption(e.target.value)}
-                onBlur={handleCaptionSave}
+                value={editedDescription}
+                onChange={(e) => setEditedDescription(e.target.value)}
+                onBlur={handleDescriptionSave}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleCaptionSave();
-                  if (e.key === 'Escape') setIsEditingCaption(false);
+                  if (e.key === 'Enter') handleDescriptionSave();
+                  if (e.key === 'Escape') setIsEditingDescription(false);
                 }}
                 style={{ width: '100%' }}
               />
             ) : (
               <div
-                onClick={() => setIsEditingCaption(true)}
+                onClick={() => setIsEditingDescription(true)}
                 style={{
                   cursor: 'pointer',
                   padding: '4px',
                   borderRadius: 4,
                   transition: 'background-color 0.2s',
                   minHeight: '24px',
-                  color: item.caption ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  color: item.description ? 'var(--text-primary)' : 'var(--text-secondary)',
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               >
-                {item.caption || 'Click to add caption...'}
+                {item.description || 'Click to add description...'}
               </div>
             )}
           </div>
 
-          {/* Description */}
-          {item.description && (
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ fontSize: '0.85em', color: 'var(--text-secondary)', marginBottom: 4 }}>
-                Description
-              </div>
-              <div>{item.description}</div>
+          {/* Keywords */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '0.85em', color: 'var(--text-secondary)', marginBottom: 4 }}>
+              Keywords
             </div>
-          )}
+            {isEditingKeywords ? (
+              <input
+                ref={keywordsInputRef}
+                type="text"
+                value={editedKeywords}
+                onChange={(e) => setEditedKeywords(e.target.value)}
+                onBlur={handleKeywordsSave}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleKeywordsSave();
+                  if (e.key === 'Escape') setIsEditingKeywords(false);
+                }}
+                style={{ width: '100%' }}
+                placeholder="keyword1 keyword2 keyword3"
+              />
+            ) : (
+              <div
+                onClick={() => setIsEditingKeywords(true)}
+                style={{
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: 4,
+                  transition: 'background-color 0.2s',
+                  minHeight: '24px',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                {item.keywords ? (
+                  item.keywords.split(/\s+/).filter(k => k.trim()).map((keyword, idx) => (
+                    <span
+                      key={idx}
+                      style={{
+                        backgroundColor: 'var(--accent)',
+                        color: 'var(--text-primary)',
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        fontSize: '0.85em',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {keyword}
+                    </span>
+                  ))
+                ) : (
+                  <span style={{ color: 'var(--text-secondary)' }}>Click to add keywords...</span>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Technical details */}
           <div

@@ -27,7 +27,7 @@ class MockStorageService:
             id=item_id,
             name=item.name,
             description=item.description,
-            caption=item.caption,
+            keywords=item.keywords,
             file_path=item.file_path,
             thumbnail_path=item.thumbnail_path,
             preview_video_path=item.preview_video_path,
@@ -45,18 +45,28 @@ class MockStorageService:
         return new_item
 
     async def get_all_items(self, user_id: Optional[str] = None) -> List[MediaItem]:
-        """Get all media items, optionally filtered by user_id."""
+        """Get all media items for the current user (or public items if not authenticated)."""
         items = list(items_db.values())
         if user_id:
+            # Authenticated: return only this user's items
             items = [item for item in items if item.user_id == user_id]
+        else:
+            # Not authenticated: return only public items
+            items = [item for item in items if item.user_id is None]
         return items
 
     async def get_item_by_id(self, item_id: str, user_id: Optional[str] = None) -> Optional[MediaItem]:
-        """Get a single media item by ID, optionally filtered by user_id."""
+        """Get a single media item by ID (must belong to user or be public)."""
         item = items_db.get(item_id)
-        if item and user_id and item.user_id != user_id:
-            return None  # Item exists but doesn't belong to this user
-        return item
+        if not item:
+            return None
+
+        if user_id:
+            # Authenticated: return only if it belongs to this user
+            return item if item.user_id == user_id else None
+        else:
+            # Not authenticated: return only if it's public
+            return item if item.user_id is None else None
 
     async def update_item(self, item_id: str, updates: MediaItemUpdate, user_id: Optional[str] = None) -> MediaItem:
         """Update a media item, optionally filtered by user_id."""
@@ -77,7 +87,7 @@ class MockStorageService:
 
     async def search_items(self, query: str, user_id: Optional[str] = None) -> List[MediaItem]:
         """
-        Search items by name, description, or caption, optionally filtered by user_id.
+        Search items by name, description, or keywords, optionally filtered by user_id.
 
         Supports filter syntax:
         - before:YYYY-MM-DD - Show results before this date
@@ -91,16 +101,22 @@ class MockStorageService:
 
         results = []
         for item in items_db.values():
-            # Filter by user_id if provided
-            if user_id and item.user_id != user_id:
-                continue
+            # Filter by user_id
+            if user_id:
+                # Authenticated: search only this user's items
+                if item.user_id != user_id:
+                    continue
+            else:
+                # Not authenticated: search only public items
+                if item.user_id is not None:
+                    continue
 
             # Apply text search (if query is not empty)
             if filters.query.strip():
                 text_match = (
                     (item.name and query_lower in item.name.lower()) or
                     (item.description and query_lower in item.description.lower()) or
-                    (item.caption and query_lower in item.caption.lower())
+                    (item.keywords and query_lower in item.keywords.lower())
                 )
                 if not text_match:
                     continue
@@ -140,14 +156,23 @@ class MockStorageService:
         embeddings_db[item_id] = vector
 
     async def get_all_embeddings(self, user_id: Optional[str] = None) -> List[dict]:
-        """Get all embeddings with their item IDs, optionally filtered by user_id."""
+        """Get all embeddings with their item IDs for the current user (or public items if not authenticated)."""
         results = []
         for item_id, vector in embeddings_db.items():
-            # Filter by user_id if provided
+            item = items_db.get(item_id)
+            if not item:
+                continue
+
+            # Filter by user_id
             if user_id:
-                item = items_db.get(item_id)
-                if not item or item.user_id != user_id:
+                # Authenticated: get embeddings for this user's items
+                if item.user_id != user_id:
                     continue
+            else:
+                # Not authenticated: get embeddings for public items only
+                if item.user_id is not None:
+                    continue
+
             results.append({"item_id": item_id, "vector": vector})
         return results
 

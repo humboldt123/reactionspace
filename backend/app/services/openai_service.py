@@ -90,18 +90,18 @@ IMPORTANT:
 Provide:
 1. NAME: The meme/clip name if recognizable, otherwise a 2-4 word descriptive title
 2. DESCRIPTION: One sentence about what's happening or the context
-3. CAPTION: Comma-separated keywords including: meme terms, characters, franchises, emotions, actions, visual elements, internet slang
+3. KEYWORDS: Space-separated keywords including: meme terms, characters, franchises, emotions, actions, visual elements, internet slang
 
 Examples of good labels:
-- Name: "But It Refused", Caption: "undertale heart determination text red gaming animation"
-- Name: "Walter White Falling", Caption: "breaking bad walter collapse floor dramatic"
-- Name: "Goomba Walking", Caption: "mario enemy mushroom brown gaming nintendo animation"
+- Name: "But It Refused", Keywords: "undertale heart determination text red gaming animation"
+- Name: "Walter White Falling", Keywords: "breaking bad walter collapse floor dramatic"
+- Name: "Goomba Walking", Keywords: "mario enemy mushroom brown gaming nintendo animation"
 
 Format as JSON:
 {{
   "name": "specific meme name or title",
   "description": "what's happening in the video",
-  "caption": "keyword1 keyword2 keyword3 keyword4"
+  "keywords": "keyword1 keyword2 keyword3 keyword4"
 }}"""
 
         try:
@@ -127,11 +127,11 @@ Format as JSON:
 
         except Exception as e:
             print(f"OpenAI Vision API error: {e}")
-            # Fallback to basic caption
+            # Fallback to basic keywords
             return {
                 "name": "Untitled Video",
                 "description": f"A video reaction clip",
-                "caption": "video reaction meme clip"
+                "keywords": "video reaction meme clip"
             }
 
     @staticmethod
@@ -155,18 +155,18 @@ IMPORTANT:
 Provide:
 1. NAME: The meme name if recognizable, otherwise a 2-4 word descriptive title
 2. DESCRIPTION: One sentence about what's shown or the context
-3. CAPTION: Comma-separated keywords including: meme terms, characters, franchises, emotions, visual elements, internet slang
+3. KEYWORDS: Space-separated keywords including: meme terms, characters, franchises, emotions, visual elements, internet slang
 
 Examples of good labels:
-- Name: "But It Refused", Caption: "undertale heart determination text red gaming"
-- Name: "Absolute Cinema", Caption: "kino perfection movie reaction pointing"
-- Name: "Goomba", Caption: "mario enemy mushroom brown gaming nintendo"
+- Name: "But It Refused", Keywords: "undertale heart determination text red gaming"
+- Name: "Absolute Cinema", Keywords: "kino perfection movie reaction pointing"
+- Name: "Goomba", Keywords: "mario enemy mushroom brown gaming nintendo"
 
 Format as JSON:
 {
   "name": "specific meme name or title",
   "description": "what's happening in the image",
-  "caption": "keyword1 keyword2 keyword3 keyword4"
+  "keywords": "keyword1 keyword2 keyword3 keyword4"
 }"""
 
         try:
@@ -197,11 +197,11 @@ Format as JSON:
 
         except Exception as e:
             print(f"OpenAI Vision API error: {e}")
-            # Fallback to basic caption
+            # Fallback to basic keywords
             return {
                 "name": "Untitled Reaction",
                 "description": f"A {file_type} reaction",
-                "caption": f"{file_type} reaction meme"
+                "keywords": f"{file_type} reaction meme"
             }
 
     @staticmethod

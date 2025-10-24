@@ -166,4 +166,19 @@ export const api = {
       item: normalizeItem(data.item),
     };
   },
+
+  async deleteAccount(): Promise<{ message: string; items_deleted: number }> {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/account`, {
+      method: 'DELETE',
+      headers: authHeaders,
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Failed to delete account');
+    }
+
+    return await res.json();
+  },
 };

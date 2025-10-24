@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { FaGoogle, FaSignOutAlt, FaUser } from 'react-icons/fa';
+import { FaGoogle, FaSignOutAlt, FaUser, FaCog } from 'react-icons/fa';
 
-export function AuthButton() {
+interface AuthButtonProps {
+  onAccountClick?: () => void;
+}
+
+export function AuthButton({ onAccountClick }: AuthButtonProps) {
   const { user, signInWithGoogle, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -127,6 +131,34 @@ export function AuthButton() {
               </div>
               <div>{user.email}</div>
             </div>
+
+            <button
+              onClick={() => {
+                setShowUserMenu(false);
+                onAccountClick?.();
+              }}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                backgroundColor: 'transparent',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                fontSize: '0.9em',
+                transition: 'background-color 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <FaCog size={14} />
+              <span>Account Settings</span>
+            </button>
 
             <button
               onClick={handleSignOut}

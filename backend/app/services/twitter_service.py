@@ -13,6 +13,64 @@ class TwitterService:
     """Service for downloading media from Twitter/X links"""
 
     @staticmethod
+    def normalize_twitter_url(url: str) -> str:
+        """
+        Normalize various Twitter URL formats to a standard format.
+
+        Handles:
+        - x.com / twitter.com
+        - URLs with query parameters or fragments
+        - Direct image URLs (i.twitter.com, pbs.twimg.com)
+        - Mobile URLs (mobile.twitter.com)
+
+        Args:
+            url: Any Twitter/X URL
+
+        Returns:
+            Normalized Twitter post URL
+        """
+        import re
+        from urllib.parse import urlparse, parse_qs
+
+        # If it's a direct image URL, we can't get the tweet - raise error
+        if 'pbs.twimg.com' in url or 'i.twitter.com' in url or 'video.twimg.com' in url:
+            # Try to extract tweet ID from the URL if present in referrer or path
+            # Otherwise, we can't process direct media URLs
+            raise ValueError("Direct image/video URLs are not supported. Please provide the tweet URL instead.")
+
+        # Parse the URL
+        parsed = urlparse(url)
+
+        # Replace x.com or any twitter domain with twitter.com
+        domain = 'twitter.com'
+
+        # Extract path - remove query params and fragments
+        path = parsed.path
+
+        # Remove trailing slashes and clean up
+        path = path.rstrip('/')
+
+        # Match Twitter post URL pattern: /username/status/1234567890
+        # Also handle /i/web/status/1234567890 (from x.com)
+        match = re.search(r'/(?:i/web/)?status/(\d+)', path)
+        if not match:
+            # Try to find username/status pattern
+            match = re.search(r'/([^/]+)/status/(\d+)', path)
+            if match:
+                username = match.group(1)
+                status_id = match.group(2)
+                return f"https://{domain}/{username}/status/{status_id}"
+            else:
+                # URL doesn't contain a status ID
+                raise ValueError(f"Invalid Twitter URL format. Could not find status ID in: {url}")
+
+        status_id = match.group(1)
+
+        # For /i/web/status/ format, we need to get the username differently
+        # But yt-dlp and gallery-dl can handle status ID alone
+        return f"https://{domain}/i/web/status/{status_id}"
+
+    @staticmethod
     def _download_image_from_url(image_url: str, temp_dir: str, filename: str) -> str:
         """
         Download an image directly from a URL.
@@ -126,6 +184,10 @@ class TwitterService:
             Exception if download fails
         """
         try:
+            # Normalize the URL first
+            url = TwitterService.normalize_twitter_url(url)
+            print(f"Normalized Twitter URL: {url}")
+
             # First, try to get the tweet text
             tweet_text = TwitterService.get_tweet_text(url)
             print(f"Extracted tweet text: {tweet_text[:100] if tweet_text else 'None'}...")

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 class MediaItemBase(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    caption: Optional[str] = None
+    keywords: Optional[str] = None
     file_type: str
     file_size: Optional[int] = None  # Size in bytes
 
@@ -26,7 +26,7 @@ class MediaItemCreate(MediaItemBase):
 class MediaItemUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    caption: Optional[str] = None
+    keywords: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None
     manual_cluster_id: Optional[str] = None
@@ -69,4 +69,4 @@ class PositionUpdate(BaseModel):
 class AICaption(BaseModel):
     name: str
     description: str
-    caption: str
+    keywords: str

@@ -30,7 +30,7 @@ class SupabaseService:
         data = {
             "name": item.name,
             "description": item.description,
-            "caption": item.caption,
+            "keywords": item.keywords,
             "file_path": item.file_path,
             "thumbnail_path": item.thumbnail_path,
             "preview_video_path": item.preview_video_path,
@@ -47,23 +47,31 @@ class SupabaseService:
         return MediaItem(**result.data[0])
 
     async def get_all_items(self, user_id: Optional[str] = None) -> List[MediaItem]:
-        """Get all media items, optionally filtered by user_id."""
+        """Get all media items for the current user (or public items if not authenticated)."""
         query = self.client.table("items").select("*")
 
-        # Filter by user_id if provided
+        # Filter by user_id
         if user_id:
+            # Authenticated: return only this user's items
             query = query.eq("user_id", user_id)
+        else:
+            # Not authenticated: return only public items (where user_id is NULL)
+            query = query.is_("user_id", "null")
 
         result = query.execute()
         return [MediaItem(**item) for item in result.data]
 
     async def get_item_by_id(self, item_id: str, user_id: Optional[str] = None) -> Optional[MediaItem]:
-        """Get a single media item by ID, optionally filtered by user_id."""
+        """Get a single media item by ID (must belong to user or be public)."""
         query = self.client.table("items").select("*").eq("id", item_id)
 
-        # Filter by user_id if provided
+        # Filter by user_id
         if user_id:
+            # Authenticated: return only if it belongs to this user
             query = query.eq("user_id", user_id)
+        else:
+            # Not authenticated: return only if it's a public item
+            query = query.is_("user_id", "null")
 
         result = query.execute()
         if result.data:
@@ -86,7 +94,7 @@ class SupabaseService:
 
     async def search_items(self, query: str, user_id: Optional[str] = None) -> List[MediaItem]:
         """
-        Search items by name, description, or caption, optionally filtered by user_id.
+        Search items by name, description, or keywords, optionally filtered by user_id.
 
         Supports filter syntax:
         - before:YYYY-MM-DD - Show results before this date
@@ -99,9 +107,9 @@ class SupabaseService:
 
         # Build base query
         if filters.query.strip():
-            # Text search on name, description, or caption
+            # Text search on name, description, or keywords
             db_query = self.client.table("items").select("*").or_(
-                f"name.ilike.%{filters.query}%,description.ilike.%{filters.query}%,caption.ilike.%{filters.query}%"
+                f"name.ilike.%{filters.query}%,description.ilike.%{filters.query}%,keywords.ilike.%{filters.query}%"
             )
         else:
             # No text query, just get all items (will be filtered)
@@ -139,9 +147,13 @@ class SupabaseService:
                 elif 'video' in filters.mime_types or any(m.startswith('video/') for m in filters.mime_types):
                     db_query = db_query.eq("file_type", "video")
 
-        # Filter by user_id if provided
+        # Filter by user_id
         if user_id:
+            # Authenticated: search only this user's items
             db_query = db_query.eq("user_id", user_id)
+        else:
+            # Not authenticated: search only public items
+            db_query = db_query.is_("user_id", "null")
 
         result = db_query.execute()
         items = [MediaItem(**item) for item in result.data]
@@ -172,14 +184,17 @@ class SupabaseService:
         self.client.table("embeddings").insert(data).execute()
 
     async def get_all_embeddings(self, user_id: Optional[str] = None) -> List[dict]:
-        """Get all embeddings with their item IDs, optionally filtered by user_id."""
+        """Get all embeddings with their item IDs for the current user (or public items if not authenticated)."""
         if user_id:
-            # Join with items table to filter by user_id
+            # Authenticated: get embeddings for this user's items
             result = self.client.table("embeddings").select(
                 "item_id, vector, items!inner(user_id)"
             ).eq("items.user_id", user_id).execute()
         else:
-            result = self.client.table("embeddings").select("item_id, vector").execute()
+            # Not authenticated: get embeddings for public items only
+            result = self.client.table("embeddings").select(
+                "item_id, vector, items!inner(user_id)"
+            ).is_("items.user_id", "null").execute()
 
         return result.data
 

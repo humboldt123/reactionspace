@@ -44,6 +44,10 @@ async def upload_media(
     5. Compute UMAP position from all embeddings
     6. Store in database
     """
+    # Require authentication for uploads
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must be signed in to upload files")
+
     # Validate file type
     allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4"]
     if file.content_type not in allowed_types:
@@ -169,11 +173,11 @@ async def upload_media(
                 ai_caption = {
                     "name": filename_without_ext,
                     "description": f"A video reaction",
-                    "caption": "video reaction clip"
+                    "keywords": "video reaction clip"
                 }
 
-        # Generate text embedding from name + description + caption
-        text_for_embedding = f"{ai_caption['name']} {ai_caption['description']} {ai_caption['caption']}"
+        # Generate text embedding from name + description + keywords
+        text_for_embedding = f"{ai_caption['name']} {ai_caption['description']} {ai_caption['keywords']}"
         embedding = await OpenAIService.generate_text_embedding(text_for_embedding)
 
         # Upload to Supabase storage
@@ -241,7 +245,7 @@ async def upload_media(
             item_create = MediaItemCreate(
                 name=ai_caption["name"],
                 description=ai_caption["description"],
-                caption=ai_caption["caption"],
+                keywords=ai_caption["keywords"],
                 file_path=file_url,
                 thumbnail_path=file_url,  # For now, same as file_path
                 preview_video_path=preview_video_url,  # MP4 preview for GIFs
@@ -299,6 +303,10 @@ async def upload_from_twitter(
     6. Compute UMAP position from all embeddings
     7. Store in database
     """
+    # Require authentication for uploads
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must be signed in to upload files")
+
     temp_path = None
     gif_path = None
 
@@ -418,19 +426,19 @@ async def upload_from_twitter(
 
                 except Exception as e:
                     print(f"Video frame extraction error: {e}")
-                    # Fallback caption
+                    # Fallback keywords
                     ai_caption = {
                         "name": "Twitter Video",
                         "description": "A video from Twitter",
-                        "caption": "twitter video clip"
+                        "keywords": "twitter video clip"
                     }
 
                 # Append tweet text to description if available
                 if tweet_text:
                     ai_caption["description"] = f"{ai_caption['description']} - Tweet: {tweet_text}"
 
-            # Generate text embedding from name + description + caption
-            text_for_embedding = f"{ai_caption['name']} {ai_caption['description']} {ai_caption['caption']}"
+            # Generate text embedding from name + description + keywords
+            text_for_embedding = f"{ai_caption['name']} {ai_caption['description']} {ai_caption['keywords']}"
             embedding = await OpenAIService.generate_text_embedding(text_for_embedding)
 
             # Generate unique filename for storage
@@ -494,7 +502,7 @@ async def upload_from_twitter(
                 item_create = MediaItemCreate(
                     name=ai_caption["name"],
                     description=ai_caption["description"],
-                    caption=ai_caption["caption"],
+                    keywords=ai_caption["keywords"],
                     file_path=file_url,
                     thumbnail_path=file_url,
                     preview_video_path=preview_video_url,
