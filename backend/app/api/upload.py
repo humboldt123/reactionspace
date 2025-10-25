@@ -49,8 +49,8 @@ async def upload_media(
     if not user_id:
         raise HTTPException(status_code=401, detail="You must be signed in to upload files")
 
-    # Check if user is pro (TODO: implement proper pro check)
-    is_pro = False
+    # Check if user is pro
+    is_pro = await supabase_service.is_user_pro(user_id)
     max_file_size = settings.MAX_FILE_SIZE_PRO if is_pro else settings.MAX_FILE_SIZE
     storage_limit = settings.STORAGE_LIMIT_PRO if is_pro else settings.STORAGE_LIMIT
 
@@ -73,6 +73,17 @@ async def upload_media(
 
     # Initial storage check (will check again with preview video size for GIFs)
     storage_info = await get_storage_info_internal(user_id)
+
+    # Check global Supabase storage limit (hard limit at 1GB for free tier)
+    global_used_bytes = storage_info.get('global_used_bytes', 0)
+    if global_used_bytes + file_size > settings.GLOBAL_STORAGE_WARNING:
+        global_used_gb = global_used_bytes / (1024 * 1024 * 1024)
+        raise HTTPException(
+            status_code=507,  # Insufficient Storage
+            detail=f"Supabase storage limit reached ({global_used_gb:.2f}GB used). The service is temporarily at capacity. Please try again later or contact support."
+        )
+
+    # Check user storage limit
     if storage_info['used_bytes'] + file_size > storage_limit:
         used_mb = storage_info['used_bytes'] / (1024 * 1024)
         limit_mb = storage_limit / (1024 * 1024)
@@ -130,6 +141,17 @@ async def upload_media(
         if preview_video_size > 0:
             total_size = file_size + preview_video_size
             storage_info = await get_storage_info_internal(user_id)
+
+            # Check global limit
+            global_used_bytes = storage_info.get('global_used_bytes', 0)
+            if global_used_bytes + total_size > settings.GLOBAL_STORAGE_WARNING:
+                global_used_gb = global_used_bytes / (1024 * 1024 * 1024)
+                raise HTTPException(
+                    status_code=507,
+                    detail=f"Supabase storage limit reached ({global_used_gb:.2f}GB used). The service is temporarily at capacity. Please try again later or contact support."
+                )
+
+            # Check user limit
             if storage_info['used_bytes'] + total_size > storage_limit:
                 used_mb = storage_info['used_bytes'] / (1024 * 1024)
                 limit_mb = storage_limit / (1024 * 1024)
@@ -287,7 +309,9 @@ async def upload_media(
                 description=ai_caption["description"],
                 keywords=ai_caption["keywords"],
                 file_path=file_url,
-                thumbnail_path=file_url,  # For now, same as file_path
+                # NOTE: Thumbnail generation not yet implemented - using full file for now
+                # TODO: Generate actual thumbnails for better performance
+                thumbnail_path=file_url,
                 preview_video_path=preview_video_url,  # MP4 preview for GIFs
                 file_type=file_type,
                 file_size=total_file_size,  # Total size including preview video for GIFs
@@ -316,12 +340,32 @@ async def upload_media(
         print(f"Upload error for file {file.filename}:")
         print(traceback.format_exc())
 
-        # Clean up temp file if it exists
+        # Clean up temp files if they exist
         try:
             if 'temp_path' in locals() and os.path.exists(temp_path):
                 os.remove(temp_path)
         except:
             pass
+
+        # CRITICAL: Clean up any files uploaded to Supabase storage if database insert failed
+        # This prevents ghost storage - files in storage but not tracked in database
+        try:
+            files_to_cleanup = []
+            if 'file_url' in locals() and file_url:
+                # Extract storage path from URL
+                if 'file_name' in locals():
+                    files_to_cleanup.append(f"reactions/{file_name}")
+
+            if 'preview_video_url' in locals() and preview_video_url:
+                # Extract storage path for preview video
+                if 'file_id' in locals():
+                    files_to_cleanup.append(f"reactions/{file_id}.mp4")
+
+            if files_to_cleanup:
+                print(f"Cleaning up uploaded files due to error: {files_to_cleanup}")
+                supabase_service.client.storage.from_(settings.STORAGE_BUCKET).remove(files_to_cleanup)
+        except Exception as cleanup_error:
+            print(f"Warning: Failed to clean up uploaded files: {cleanup_error}")
 
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
@@ -347,8 +391,8 @@ async def upload_from_twitter(
     if not user_id:
         raise HTTPException(status_code=401, detail="You must be signed in to upload files")
 
-    # Check if user is pro (TODO: implement proper pro check)
-    is_pro = False
+    # Check if user is pro
+    is_pro = await supabase_service.is_user_pro(user_id)
     max_file_size = settings.MAX_FILE_SIZE_PRO if is_pro else settings.MAX_FILE_SIZE
     storage_limit = settings.STORAGE_LIMIT_PRO if is_pro else settings.STORAGE_LIMIT
 
@@ -382,6 +426,17 @@ async def upload_from_twitter(
 
         # Check user storage limit
         storage_info = await get_storage_info_internal(user_id)
+
+        # Check global limit
+        global_used_bytes = storage_info.get('global_used_bytes', 0)
+        if global_used_bytes + total_size > settings.GLOBAL_STORAGE_WARNING:
+            global_used_gb = global_used_bytes / (1024 * 1024 * 1024)
+            raise HTTPException(
+                status_code=507,
+                detail=f"Supabase storage limit reached ({global_used_gb:.2f}GB used). The service is temporarily at capacity. Please try again later or contact support."
+            )
+
+        # Check user limit
         if storage_info['used_bytes'] + total_size > storage_limit:
             used_mb = storage_info['used_bytes'] / (1024 * 1024)
             limit_mb = storage_limit / (1024 * 1024)
@@ -582,6 +637,8 @@ async def upload_from_twitter(
                     description=ai_caption["description"],
                     keywords=ai_caption["keywords"],
                     file_path=file_url,
+                    # NOTE: Thumbnail generation not yet implemented - using full file for now
+                    # TODO: Generate actual thumbnails for better performance
                     thumbnail_path=file_url,
                     preview_video_path=preview_video_url,
                     file_type=file_type,
@@ -633,5 +690,38 @@ async def upload_from_twitter(
                 os.remove(gif_path)
         except:
             pass
+
+        # CRITICAL: Clean up any files uploaded to Supabase storage if database insert failed
+        # This prevents ghost storage - files in storage but not tracked in database
+        try:
+            if 'uploaded_items' in locals() and uploaded_items:
+                # If we have some successful uploads but overall process failed,
+                # clean up the Supabase files for those items
+                files_to_cleanup = []
+                for item in uploaded_items:
+                    # Extract storage paths from URLs
+                    if hasattr(item, 'file_path') and item.file_path:
+                        # Extract path from full URL (e.g., "reactions/abc.gif")
+                        path_parts = item.file_path.split('/reactions/')
+                        if len(path_parts) > 1:
+                            files_to_cleanup.append(f"reactions/{path_parts[-1]}")
+
+                    if hasattr(item, 'preview_video_path') and item.preview_video_path:
+                        path_parts = item.preview_video_path.split('/reactions/')
+                        if len(path_parts) > 1:
+                            files_to_cleanup.append(f"reactions/{path_parts[-1]}")
+
+                if files_to_cleanup:
+                    print(f"Cleaning up {len(files_to_cleanup)} uploaded file(s) due to error")
+                    supabase_service.client.storage.from_(settings.STORAGE_BUCKET).remove(files_to_cleanup)
+
+                    # Also delete database records
+                    for item in uploaded_items:
+                        try:
+                            await supabase_service.delete_item(item.id, user_id)
+                        except:
+                            pass
+        except Exception as cleanup_error:
+            print(f"Warning: Failed to clean up uploaded files: {cleanup_error}")
 
         raise HTTPException(status_code=500, detail=f"Twitter upload failed: {str(e)}")

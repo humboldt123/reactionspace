@@ -9,6 +9,7 @@ interface AccountSettingsProps {
   storageUsed: number; // in bytes
   storageLimit: number; // in bytes
   isDemoMode: boolean;
+  isPro: boolean;
   globalWarning?: boolean;
   globalUsedBytes?: number;
 }
@@ -21,6 +22,7 @@ export function AccountSettings({
   storageUsed,
   storageLimit,
   isDemoMode,
+  isPro,
   globalWarning,
   globalUsedBytes,
 }: AccountSettingsProps) {
@@ -30,7 +32,7 @@ export function AccountSettings({
   const storageUsedMB = (storageUsed / (1024 * 1024)).toFixed(1);
   const storageLimitMB = (storageLimit / (1024 * 1024)).toFixed(0);
 
-  const accountType = isDemoMode ? 'Demo' : 'Free';
+  const accountType = isDemoMode ? 'Demo' : isPro ? 'Pro' : 'Free';
 
   const handleDeleteAccount = () => {
     if (showDeleteConfirm) {

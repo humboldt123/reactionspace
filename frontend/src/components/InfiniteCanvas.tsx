@@ -14,6 +14,7 @@ interface InfiniteCanvasProps {
   deletingItemId: string | null;
   onDeleteAnimationComplete: (id: string) => void;
   onBatchItemDragEnd?: (updates: Array<{ id: string; x: number; y: number }>) => void;
+  onBatchDelete?: (itemIds: string[]) => void;
 }
 
 interface SelectionBox {
@@ -23,7 +24,7 @@ interface SelectionBox {
   y2: number;
 }
 
-export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItemId, onDeleteAnimationComplete, onBatchItemDragEnd }: InfiniteCanvasProps) {
+export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItemId, onDeleteAnimationComplete, onBatchItemDragEnd, onBatchDelete }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
@@ -35,6 +36,8 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
   const [isSelecting, setIsSelecting] = useState(false);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const justFinishedSelectionRef = useRef(false);
+  const [preBoxSelectionIds, setPreBoxSelectionIds] = useState<Set<string>>(new Set());
 
   // Center the canvas on initial load
   useEffect(() => {
@@ -166,6 +169,12 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
       return;
     }
 
+    // Only start selection if holding Cmd (Mac) or Ctrl (other platforms)
+    const isModifierPressed = e.evt.metaKey || e.evt.ctrlKey;
+    if (!isModifierPressed) {
+      return;
+    }
+
     const stage = stageRef.current;
     if (!stage) return;
 
@@ -177,12 +186,15 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
     const x = (pos.x - canvasState.x) / canvasState.scale;
     const y = (pos.y - canvasState.y) / canvasState.scale;
 
+    // Save the current selection before starting box selection
+    setPreBoxSelectionIds(new Set(selectedItemIds));
+
     setIsSelecting(true);
     setSelectionBox({ x1: x, y1: y, x2: x, y2: y });
 
     // Disable stage dragging while selecting
     stage.draggable(false);
-  }, [canvasState.x, canvasState.y, canvasState.scale]);
+  }, [canvasState.x, canvasState.y, canvasState.scale, selectedItemIds]);
 
   // Handle mouse move for selection
   const handleStageMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -207,7 +219,7 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
       const minY = Math.min(selectionBox.y1, y);
       const maxY = Math.max(selectionBox.y1, y);
 
-      const selected = new Set<string>();
+      const boxSelected = new Set<string>();
       items.forEach(item => {
         // Check if item intersects with selection box
         const itemMinX = item.x;
@@ -217,17 +229,27 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
 
         if (itemMaxX >= minX && itemMinX <= maxX &&
             itemMaxY >= minY && itemMinY <= maxY) {
-          selected.add(item.id);
+          boxSelected.add(item.id);
         }
       });
 
-      setSelectedItemIds(selected);
+      // Merge the box selection with previously selected items
+      const combined = new Set([...preBoxSelectionIds, ...boxSelected]);
+      setSelectedItemIds(combined);
     }
-  }, [isSelecting, selectionBox, items, canvasState.x, canvasState.y, canvasState.scale]);
+  }, [isSelecting, selectionBox, items, canvasState.x, canvasState.y, canvasState.scale, preBoxSelectionIds]);
 
   // Handle mouse up to finish selection
   const handleStageMouseUp = useCallback(() => {
     if (isSelecting) {
+      // Mark that we just finished a selection to prevent the click handler from clearing
+      justFinishedSelectionRef.current = true;
+
+      // Clear the flag after a short delay (enough time for click event to fire)
+      setTimeout(() => {
+        justFinishedSelectionRef.current = false;
+      }, 50);
+
       setIsSelecting(false);
       setSelectionBox(null);
       // Keep selectedItemIds - they stay selected!
@@ -256,17 +278,20 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
         return newSet;
       });
     } else {
-      // Regular click: select only this item or open detail panel
+      // Regular click: just open detail panel, don't select
       if (onItemClick) {
         onItemClick(id);
       }
-      // Also select it
-      setSelectedItemIds(new Set([id]));
     }
   }, [onItemClick]);
 
   // Clear selection when clicking on empty space (not during selection)
   const handleStageClick = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    // Don't clear selection if we just finished a selection drag
+    if (justFinishedSelectionRef.current) {
+      return;
+    }
+
     const clickedOnEmpty = e.target === layerRef.current || e.target === stageRef.current;
     if (clickedOnEmpty) {
       setSelectedItemIds(new Set());
@@ -275,16 +300,26 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
 
   // Handle Delete key to delete selected items
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItemIds.size > 0) {
-        // TODO: Implement batch delete
-        console.log('Delete selected items:', Array.from(selectedItemIds));
+        // Prevent default backspace behavior (going back in browser)
+        e.preventDefault();
+
+        const itemIdsToDelete = Array.from(selectedItemIds);
+
+        // Clear selection immediately for better UX
+        setSelectedItemIds(new Set());
+
+        // Call parent callback if provided
+        if (onBatchDelete) {
+          onBatchDelete(itemIdsToDelete);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItemIds]);
+  }, [selectedItemIds, onBatchDelete]);
 
   // calculate grid properties based on zoom
   const gridScale = Math.pow(canvasState.scale, 0.3); // scale slowly (cube root!)

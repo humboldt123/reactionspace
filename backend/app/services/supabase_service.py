@@ -273,10 +273,20 @@ class SupabaseService:
         public_url = self.client.storage.from_(settings.STORAGE_BUCKET).get_public_url(file_path)
         return public_url
 
+    async def is_user_pro(self, user_id: str) -> bool:
+        """Check if a user has pro status."""
+        try:
+            result = self.client.table("user_profiles").select("is_pro").eq("id", user_id).execute()
+            if result.data and len(result.data) > 0:
+                return result.data[0].get("is_pro", False)
+            return False
+        except Exception as e:
+            print(f"Error checking pro status: {e}")
+            return False
 
-# Use mock storage if Supabase is not configured
-if SUPABASE_CONFIGURED:
-    supabase_service = SupabaseService()
-else:
-    from app.services.mock_storage import mock_storage_service
-    supabase_service = mock_storage_service  # type: ignore
+
+# Supabase is required - no mock storage
+if not SUPABASE_CONFIGURED:
+    raise Exception("Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_KEY in your environment variables.")
+
+supabase_service = SupabaseService()

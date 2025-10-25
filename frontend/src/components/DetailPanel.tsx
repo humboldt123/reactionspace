@@ -22,7 +22,7 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const descriptionInputRef = useRef<HTMLInputElement>(null);
+  const descriptionInputRef = useRef<HTMLTextAreaElement>(null);
   const keywordsInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -332,17 +332,26 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
               Description
             </div>
             {isEditingDescription ? (
-              <input
+              <textarea
                 ref={descriptionInputRef}
-                type="text"
                 value={editedDescription}
                 onChange={(e) => setEditedDescription(e.target.value)}
                 onBlur={handleDescriptionSave}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleDescriptionSave();
-                  if (e.key === 'Escape') setIsEditingDescription(false);
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    handleDescriptionSave();
+                  }
+                  if (e.key === 'Escape') {
+                    setIsEditingDescription(false);
+                  }
                 }}
-                style={{ width: '100%' }}
+                style={{
+                  width: '100%',
+                  minHeight: '80px',
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  lineHeight: '1.5',
+                }}
               />
             ) : (
               <div
@@ -354,6 +363,8 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
                   transition: 'background-color 0.2s',
                   minHeight: '24px',
                   color: item.description ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  whiteSpace: 'pre-wrap',
+                  wordWrap: 'break-word',
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}

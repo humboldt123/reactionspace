@@ -25,10 +25,10 @@ class Settings:
 
     # Storage
     STORAGE_BUCKET: str = "reactions"
-    MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB for free users
-    MAX_FILE_SIZE_PRO: int = 200 * 1024 * 1024  # 200MB for pro users
-    STORAGE_LIMIT: int = 500 * 1024 * 1024  # 500MB per free user
-    STORAGE_LIMIT_PRO: int = 5 * 1024 * 1024 * 1024  # 5GB per pro user
-    GLOBAL_STORAGE_WARNING: int = 1 * 1024 * 1024 * 1024  # Warn when approaching 1GB free tier limit
+    MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB per file for free users
+    MAX_FILE_SIZE_PRO: int = 200 * 1024 * 1024  # 200MB per file for pro users
+    STORAGE_LIMIT: int = 50 * 1024 * 1024  # 50MB total storage for free users
+    STORAGE_LIMIT_PRO: int = 5 * 1024 * 1024 * 1024  # 5GB total storage for pro users
+    GLOBAL_STORAGE_WARNING: int = 1 * 1024 * 1024 * 1024  # Warn when approaching 1GB Supabase free tier limit
 
 settings = Settings()

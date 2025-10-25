@@ -126,6 +126,13 @@ Format as JSON:
             return result
 
         except Exception as e:
+            # Check if it's a rate limit error
+            error_str = str(e)
+            if "rate_limit" in error_str.lower() or "429" in error_str:
+                raise Exception("OpenAI API rate limit reached. Please try again in a few moments.")
+            elif "quota" in error_str.lower() or "insufficient_quota" in error_str.lower():
+                raise Exception("OpenAI API quota exceeded. The service is temporarily unavailable. Please contact support.")
+
             print(f"OpenAI Vision API error: {e}")
             # Fallback to basic keywords
             return {
@@ -196,6 +203,13 @@ Format as JSON:
             return result
 
         except Exception as e:
+            # Check if it's a rate limit error
+            error_str = str(e)
+            if "rate_limit" in error_str.lower() or "429" in error_str:
+                raise Exception("OpenAI API rate limit reached. Please try again in a few moments.")
+            elif "quota" in error_str.lower() or "insufficient_quota" in error_str.lower():
+                raise Exception("OpenAI API quota exceeded. The service is temporarily unavailable. Please contact support.")
+
             print(f"OpenAI Vision API error: {e}")
             # Fallback to basic keywords
             return {
@@ -217,6 +231,13 @@ Format as JSON:
             )
             return response.data[0].embedding
         except Exception as e:
+            # Check if it's a rate limit error
+            error_str = str(e)
+            if "rate_limit" in error_str.lower() or "429" in error_str:
+                raise Exception("OpenAI API rate limit reached. Please try again in a few moments.")
+            elif "quota" in error_str.lower() or "insufficient_quota" in error_str.lower():
+                raise Exception("OpenAI API quota exceeded. The service is temporarily unavailable. Please contact support.")
+
             print(f"OpenAI Embeddings API error: {e}")
             # Return zero vector as fallback
             return [0.0] * 1536

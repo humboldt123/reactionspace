@@ -58,7 +58,7 @@ export const api = {
     return data.map(normalizeItem);
   },
 
-  async getStorage(): Promise<{ used_bytes: number; limit_bytes: number; item_count: number }> {
+  async getStorage(): Promise<{ used_bytes: number; limit_bytes: number; item_count: number; is_pro: boolean; global_warning?: boolean; global_used_bytes?: number }> {
     const authHeaders = await getAuthHeaders();
     const res = await fetch(`${API_BASE}/storage`, {
       headers: authHeaders,
@@ -141,6 +141,25 @@ export const api = {
     });
 
     if (!res.ok) throw new Error('Failed to delete item');
+  },
+
+  async batchDeleteItems(itemIds: string[]): Promise<{ deleted: number; failed: number }> {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/items/batch-delete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify(itemIds),
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Batch delete failed');
+    }
+
+    return await res.json();
   },
 
   async uploadFromTwitter(url: string): Promise<{ item: MediaItem; message: string }> {

@@ -25,8 +25,10 @@ async def get_storage_info_internal(user_id: Optional[str]) -> dict:
     items = await supabase_service.get_all_items(user_id)
     total_bytes = sum(item.file_size for item in items if item.file_size)
 
-    # TODO: Implement proper pro user check
+    # Check if user is pro
     is_pro = False
+    if user_id:
+        is_pro = await supabase_service.is_user_pro(user_id)
     limit_bytes = settings.STORAGE_LIMIT_PRO if is_pro else settings.STORAGE_LIMIT
 
     # Calculate global storage used across all users
@@ -196,6 +198,36 @@ async def delete_item(
     try:
         await supabase_service.delete_item(item_id, user_id)
         return {"message": "Item deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/items/batch-delete")
+async def batch_delete_items(
+    item_ids: List[str],
+    user_id: Optional[str] = Depends(get_current_user_id)
+):
+    """Delete multiple items at once."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    try:
+        deleted_count = 0
+        failed_count = 0
+
+        for item_id in item_ids:
+            try:
+                await supabase_service.delete_item(item_id, user_id)
+                deleted_count += 1
+            except Exception as e:
+                print(f"Error deleting item {item_id}: {e}")
+                failed_count += 1
+
+        return {
+            "message": f"Deleted {deleted_count} items",
+            "deleted": deleted_count,
+            "failed": failed_count
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

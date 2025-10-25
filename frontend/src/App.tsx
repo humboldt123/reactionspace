@@ -7,6 +7,7 @@ import { AuthButton } from './components/AuthButton';
 import { AccountSettings } from './components/AccountSettings';
 import { MobileView } from './components/MobileView';
 import { TwitterLinkBar } from './components/TwitterLinkBar';
+import { Toast } from './components/Toast';
 import { useIsMobile } from './hooks/useIsMobile';
 import { useAuth } from './contexts/AuthContext';
 import type { MediaItem } from './types';
@@ -41,13 +42,15 @@ function App() {
   const [twitterUploadStatus, setTwitterUploadStatus] = useState<TwitterUploadStatus | null>(null);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
   const [pasteConfirm, setPasteConfirm] = useState<PasteConfirmation | null>(null);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [storageUsed, setStorageUsed] = useState(0);
   const [storageLimit, setStorageLimit] = useState(1024 * 1024 * 1024); // 1GB default
   const [globalWarning, setGlobalWarning] = useState(false);
   const [globalUsedBytes, setGlobalUsedBytes] = useState(0);
+  const [isPro, setIsPro] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error');
   const isMobile = useIsMobile();
   const { user, signOut } = useAuth();
 
@@ -71,6 +74,7 @@ function App() {
       setStorageLimit(storage.limit_bytes);
       setGlobalWarning(storage.global_warning || false);
       setGlobalUsedBytes(storage.global_used_bytes || 0);
+      setIsPro(storage.is_pro || false);
     }).catch(err => {
       console.error('Failed to load storage info:', err);
     });
@@ -84,6 +88,7 @@ function App() {
         setStorageLimit(storage.limit_bytes);
         setGlobalWarning(storage.global_warning || false);
         setGlobalUsedBytes(storage.global_used_bytes || 0);
+        setIsPro(storage.is_pro || false);
       }).catch(err => {
         console.error('Failed to refresh storage info:', err);
       });
@@ -179,9 +184,15 @@ function App() {
 
       } catch (error) {
         console.error('Upload failed:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        // Show toast with error
+        setToastMessage(errorMessage);
+        setToastType('error');
+
         setUploadQueue(prev => prev.map(item =>
           item.file === pendingItem.file
-            ? { ...item, status: 'error' as const, error: String(error) }
+            ? { ...item, status: 'error' as const, error: errorMessage }
             : item
         ));
 
@@ -198,8 +209,8 @@ function App() {
   const handleUpload = useCallback(async (files: File[]) => {
     // Check if user is signed in
     if (!user) {
-      setAuthError('Please sign in to upload files');
-      setTimeout(() => setAuthError(null), 5000);
+      setToastMessage('Please sign in to upload files');
+      setToastType('error');
       return;
     }
 
@@ -257,12 +268,42 @@ function App() {
     }
   }, []);
 
+  const handleBatchDelete = useCallback(async (itemIds: string[]) => {
+    try {
+      // Remove items from UI immediately
+      setItems((prev) => prev.filter((item) => !itemIds.includes(item.id)));
+
+      // Delete via API
+      const result = await api.batchDeleteItems(itemIds);
+
+      // Show success message
+      setToastMessage(`Deleted ${result.deleted} item${result.deleted !== 1 ? 's' : ''}`);
+      setToastType('success');
+
+      // If any failed, show warning
+      if (result.failed > 0) {
+        setTimeout(() => {
+          setToastMessage(`Warning: ${result.failed} item${result.failed !== 1 ? 's' : ''} failed to delete`);
+          setToastType('error');
+        }, 2500);
+      }
+    } catch (error) {
+      console.error('Failed to batch delete items:', error);
+      setToastMessage('Failed to delete items');
+      setToastType('error');
+
+      // Refresh items list to restore any that weren't deleted
+      const updatedItems = await api.getItems();
+      setItems(updatedItems);
+    }
+  }, []);
+
   const handleTwitterLinkSubmit = useCallback(async (url: string) => {
     // Check if user is signed in
     if (!user) {
-      setAuthError('Please sign in to upload files');
+      setToastMessage('Please sign in to upload files');
+      setToastType('error');
       setIsTwitterLinkBarOpen(false);
-      setTimeout(() => setAuthError(null), 5000);
       return;
     }
 
@@ -296,10 +337,16 @@ function App() {
       }, 2000);
     } catch (error) {
       console.error('Failed to download from Twitter:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Show toast with error
+      setToastMessage(errorMessage);
+      setToastType('error');
+
       setTwitterUploadStatus({
         url,
         status: 'error',
-        error: String(error),
+        error: errorMessage,
       });
 
       // Clear error after 5 seconds
@@ -307,7 +354,7 @@ function App() {
         setTwitterUploadStatus(null);
       }, 5000);
     }
-  }, []);
+  }, [user]);
 
   // Handle clipboard paste (Cmd+V / Ctrl+V)
   useEffect(() => {
@@ -330,8 +377,8 @@ function App() {
             e.preventDefault();
 
             if (!user) {
-              setAuthError('Please sign in to upload files');
-              setTimeout(() => setAuthError(null), 5000);
+              setToastMessage('Please sign in to upload files');
+              setToastType('error');
               return;
             }
 
@@ -354,8 +401,8 @@ function App() {
         e.preventDefault();
 
         if (!user) {
-          setAuthError('Please sign in to upload files');
-          setTimeout(() => setAuthError(null), 5000);
+          setToastMessage('Please sign in to upload files');
+          setToastType('error');
           return;
         }
 
@@ -446,6 +493,7 @@ function App() {
             storageUsed={storageUsed}
             storageLimit={storageLimit}
             isDemoMode={isDemoMode}
+            isPro={isPro}
             globalWarning={globalWarning}
             globalUsedBytes={globalUsedBytes}
           />
@@ -460,25 +508,13 @@ function App() {
       {/* Upload Zone */}
       <UploadZone onUpload={handleUpload} isUploading={uploadQueue.length > 0} />
 
-      {/* Auth Error Message */}
-      {authError && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 20,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            padding: '12px 20px',
-            backgroundColor: '#ef4444',
-            color: 'white',
-            borderRadius: 6,
-            zIndex: 1000,
-            fontSize: '0.9em',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-          }}
-        >
-          {authError}
-        </div>
+      {/* Toast Notifications */}
+      {toastMessage && (
+        <Toast
+          message={toastMessage}
+          type={toastType}
+          onClose={() => setToastMessage(null)}
+        />
       )}
 
       {/* Paste Confirmation Dialog */}
@@ -708,6 +744,7 @@ function App() {
           storageUsed={storageUsed}
           storageLimit={storageLimit}
           isDemoMode={isDemoMode}
+          isPro={isPro}
           globalWarning={globalWarning}
           globalUsedBytes={globalUsedBytes}
         />
@@ -721,6 +758,7 @@ function App() {
         onItemClick={handleItemClick}
         deletingItemId={deletingItemId}
         onDeleteAnimationComplete={handleDeleteAnimationComplete}
+        onBatchDelete={handleBatchDelete}
       />
 
       {/* Search Modal */}
