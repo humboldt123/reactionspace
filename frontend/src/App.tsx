@@ -55,11 +55,11 @@ function App() {
   const { user, signOut } = useAuth();
 
   // Detect platform for keyboard shortcuts display
-  // Use userAgentData if available (modern), fallback to userAgent (legacy)
   const isMac = useMemo(() => {
-    // Modern approach
-    if (navigator.userAgentData?.platform) {
-      return navigator.userAgentData.platform.toUpperCase().includes('MAC');
+    // Modern approach - check if userAgentData exists
+    const nav = navigator as any;
+    if (nav.userAgentData?.platform) {
+      return nav.userAgentData.platform.toUpperCase().includes('MAC');
     }
     // Fallback for older browsers
     if (navigator.platform) {
