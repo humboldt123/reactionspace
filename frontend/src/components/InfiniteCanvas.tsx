@@ -197,7 +197,7 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
   }, [canvasState.x, canvasState.y, canvasState.scale, selectedItemIds]);
 
   // Handle mouse move for selection
-  const handleStageMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+  const handleStageMouseMove = useCallback(() => {
     if (!isSelecting || !selectionBox) return;
 
     const stage = stageRef.current;

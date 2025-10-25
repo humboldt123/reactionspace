@@ -318,7 +318,7 @@ function App() {
 
     try {
       // This happens in the background now
-      const result = await api.uploadFromTwitter(url);
+      await api.uploadFromTwitter(url);
 
       // Update status to completed
       setTwitterUploadStatus({

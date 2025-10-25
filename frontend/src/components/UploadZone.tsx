@@ -5,21 +5,9 @@ interface UploadZoneProps {
   isUploading: boolean;
 }
 
-export function UploadZone({ onUpload, isUploading }: UploadZoneProps) {
+export function UploadZone({ onUpload }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragCounter, setDragCounter] = useState(0);
-
-  const handleFileInput = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files || []).filter(
-        (file) => file.type.startsWith('image/') || file.type.startsWith('video/')
-      );
-      if (files.length > 0) {
-        await onUpload(files);
-      }
-    },
-    [onUpload]
-  );
 
   // Use window-level event listeners for drag and drop
   useEffect(() => {
