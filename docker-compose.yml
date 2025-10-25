@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: reactionspace-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/uploads:/app/uploads
+    expose:
+      - "8000"
+    networks:
+      - reactionspace
+
+  frontend:
+    build: ./frontend
+    container_name: reactionspace-frontend
+    restart: unless-stopped
+    expose:
+      - "80"
+    networks:
+      - reactionspace
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    container_name: reactionspace-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/sites-enabled:/etc/nginx/sites-enabled
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    networks:
+      - reactionspace
+    depends_on:
+      - frontend
+      - backend
+
+  certbot:
+    image: certbot/certbot
+    container_name: reactionspace-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - reactionspace
+
+networks:
+  reactionspace:
+    driver: bridge

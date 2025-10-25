@@ -8,20 +8,15 @@ import os
 
 app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
 
-# Serve uploaded files in demo mode
-uploads_dir = "/Users/vish/Documents/Programming/reactionspace/backend/uploads"
+# Serve uploaded files
+uploads_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
 os.makedirs(uploads_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://localhost:3000"
-    ],  # Vite dev server
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -15,8 +15,19 @@ class Settings:
 
     # App settings
     APP_NAME: str = "ReactionSpace API"
-    DEBUG: bool = True
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
+
+    # CORS settings
+    ALLOWED_ORIGINS: list = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:3000",
+        "https://reactionspace.app",
+        "https://www.reactionspace.app",
+        "http://reactionspace.app",
+    ]
 
     # UMAP settings
     UMAP_N_NEIGHBORS: int = 15

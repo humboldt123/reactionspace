@@ -2,4 +2,15 @@ api_keys_here.txt
 todo.file
 todo.ignore
 reactions/
- **/.DS_Store
+**/.DS_Store
+
+# Production environment files
+backend/.env
+
+# SSL certificates and nginx logs
+certbot/
+nginx/log/
+
+# Uploaded files (stored in Supabase or as Docker volume)
+backend/uploads/
+uploads/

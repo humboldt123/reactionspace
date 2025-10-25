@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Environment files (will be mounted separately)
+.env
+.env.*
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+*.egg-info
+.pytest_cache
+
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build artifacts
+dist
+build
+*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (will be mounted as volume)
+uploads/
+
+# Documentation
+README.md
+*.md
+
+# Deployment
+docker-compose*.yml
+nginx/
+certbot/
