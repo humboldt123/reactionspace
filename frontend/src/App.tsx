@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { InfiniteCanvas } from './components/InfiniteCanvas';
 import { SearchModal } from './components/SearchModal';
 import { DetailPanel } from './components/DetailPanel';
@@ -54,8 +54,20 @@ function App() {
   const isMobile = useIsMobile();
   const { user, signOut } = useAuth();
 
-  // Detect platform for keyboard shortcuts
-  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  // Detect platform for keyboard shortcuts display
+  // Use userAgentData if available (modern), fallback to userAgent (legacy)
+  const isMac = useMemo(() => {
+    // Modern approach
+    if (navigator.userAgentData?.platform) {
+      return navigator.userAgentData.platform.toUpperCase().includes('MAC');
+    }
+    // Fallback for older browsers
+    if (navigator.platform) {
+      return navigator.platform.toUpperCase().includes('MAC');
+    }
+    // Last resort - check userAgent string
+    return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+  }, []);
 
   // Load config, items, and storage on mount
   useEffect(() => {
@@ -577,71 +589,12 @@ function App() {
         </>
       )}
 
-      {/* Keyboard Shortcuts Indicator */}
-      <div
-        style={{
-          position: 'fixed',
-          bottom: 20,
-          left: 20,
-          padding: '10px 14px',
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 6,
-          zIndex: 99,
-          fontSize: '0.75em',
-          color: 'var(--text-secondary)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <kbd style={{
-            padding: '2px 5px',
-            backgroundColor: 'var(--bg-tertiary)',
-            border: '1px solid var(--border)',
-            borderRadius: 3,
-            fontSize: '0.9em',
-            fontFamily: 'monospace',
-          }}>
-            {isMac ? '⌘K' : 'Ctrl+K'}
-          </kbd>
-          <span>Search</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <kbd style={{
-            padding: '2px 5px',
-            backgroundColor: 'var(--bg-tertiary)',
-            border: '1px solid var(--border)',
-            borderRadius: 3,
-            fontSize: '0.9em',
-            fontFamily: 'monospace',
-          }}>
-            {isMac ? '⌘V' : 'Ctrl+V'}
-          </kbd>
-          <span>Paste</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <kbd style={{
-            padding: '2px 5px',
-            backgroundColor: 'var(--bg-tertiary)',
-            border: '1px solid var(--border)',
-            borderRadius: 3,
-            fontSize: '0.9em',
-            fontFamily: 'monospace',
-          }}>
-            Enter
-          </kbd>
-          <span>Upload from URL</span>
-        </div>
-      </div>
-
       {/* Upload Queue Status */}
       {(uploadQueue.length > 0 || twitterUploadStatus) && (
         <div
           style={{
             position: 'fixed',
-            bottom: 140,
+            bottom: 20,
             left: 20,
             padding: '12px 16px',
             backgroundColor: 'var(--bg-secondary)',

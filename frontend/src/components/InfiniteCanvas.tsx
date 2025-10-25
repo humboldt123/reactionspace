@@ -345,6 +345,7 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
         height: '100%',
         cursor: 'grab',
         position: 'relative',
+        overflow: 'hidden',
         backgroundColor: 'var(--bg-primary)',
         backgroundImage: `
           linear-gradient(90deg, rgba(42, 42, 42, ${gridOpacity}) 1px, transparent 1px),
@@ -352,6 +353,7 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
         `,
         backgroundSize: `${gridSize}px ${gridSize}px`,
         backgroundPosition: `${gridOffsetX}px ${gridOffsetY}px`,
+        backgroundRepeat: 'repeat',
       }}
     >
       <Stage

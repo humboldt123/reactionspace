@@ -15,7 +15,14 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
     const handleDragEnter = (e: DragEvent) => {
       e.preventDefault();
       dragCounter++;
-      setIsDragging(true);
+
+      // Check if we're dragging files (not just text)
+      const hasFiles = e.dataTransfer?.types?.includes('Files') ||
+                       e.dataTransfer?.types?.includes('application/x-moz-file');
+
+      if (hasFiles) {
+        setIsDragging(true);
+      }
     };
 
     const handleDragLeave = (e: DragEvent) => {
@@ -36,26 +43,55 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
 
     const handleDrop = async (e: DragEvent) => {
       e.preventDefault();
+      e.stopPropagation();
       setIsDragging(false);
       dragCounter = 0;
 
-      // Only process if we have actual files (not just text/uri-list which happens on Linux)
+      console.log('Drop event:', {
+        types: e.dataTransfer?.types,
+        filesLength: e.dataTransfer?.files?.length,
+        items: e.dataTransfer?.items?.length,
+      });
+
+      // Check if we have files
       if (!e.dataTransfer?.files || e.dataTransfer.files.length === 0) {
-        console.log('No files in drop event, only text/uri-list');
+        console.log('No files in drop event');
         return;
       }
 
+      // Convert FileList to array and filter
       const files = Array.from(e.dataTransfer.files).filter((file) => {
-        // Ensure we have actual File objects with valid types
+        console.log('File:', {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+        });
+
+        // On Linux, some files might not have a type set
+        // Try to accept files without type if they have common image/video extensions
         if (!file.type) {
-          console.log(`Skipping file without type: ${file.name}`);
+          const ext = file.name.split('.').pop()?.toLowerCase();
+          const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'];
+          const videoExts = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'];
+
+          if (ext && (imageExts.includes(ext) || videoExts.includes(ext))) {
+            console.log(`Accepting file without type based on extension: ${ext}`);
+            return true;
+          }
+
+          console.log(`Skipping file without type or recognized extension: ${file.name}`);
           return false;
         }
+
         return file.type.startsWith('image/') || file.type.startsWith('video/');
       });
 
+      console.log(`Filtered files: ${files.length} out of ${e.dataTransfer.files.length}`);
+
       if (files.length > 0) {
         await onUpload(files);
+      } else {
+        console.log('No valid image or video files found');
       }
     };
 

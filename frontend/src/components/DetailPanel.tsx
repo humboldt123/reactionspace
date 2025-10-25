@@ -242,25 +242,26 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
             />
           )}
 
-          {/* Unmute button for videos (top-left) */}
+          {/* Unmute button for videos (bottom-left) */}
           {item.fileType === 'video' && isHoveringMedia && (
             <button
               onClick={() => setIsMuted(!isMuted)}
               style={{
                 position: 'absolute',
-                top: 10,
+                bottom: 10,
                 left: 10,
-                width: 32,
-                height: 32,
+                width: 28,
+                height: 28,
                 padding: 0,
                 backgroundColor: 'rgba(0, 0, 0, 0.7)',
                 backdropFilter: 'blur(4px)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                borderRadius: 4,
               }}
             >
-              {isMuted ? <FaVolumeMute size={16} /> : <FaVolumeUp size={16} />}
+              {isMuted ? <FaVolumeMute size={14} /> : <FaVolumeUp size={14} />}
             </button>
           )}
 
