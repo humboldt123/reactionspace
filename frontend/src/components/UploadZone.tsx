@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 interface UploadZoneProps {
   onUpload: (files: File[]) => Promise<void>;
@@ -7,25 +7,23 @@ interface UploadZoneProps {
 
 export function UploadZone({ onUpload }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [dragCounter, setDragCounter] = useState(0);
 
   // Use window-level event listeners for drag and drop
   useEffect(() => {
+    let dragCounter = 0;
+
     const handleDragEnter = (e: DragEvent) => {
       e.preventDefault();
-      setDragCounter((prev) => prev + 1);
+      dragCounter++;
       setIsDragging(true);
     };
 
     const handleDragLeave = (e: DragEvent) => {
       e.preventDefault();
-      setDragCounter((prev) => {
-        const newCounter = prev - 1;
-        if (newCounter === 0) {
-          setIsDragging(false);
-        }
-        return newCounter;
-      });
+      dragCounter--;
+      if (dragCounter === 0) {
+        setIsDragging(false);
+      }
     };
 
     const handleDragOver = (e: DragEvent) => {
@@ -35,7 +33,7 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
     const handleDrop = async (e: DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-      setDragCounter(0);
+      dragCounter = 0;
 
       const files = Array.from(e.dataTransfer?.files || []).filter((file) =>
         file.type.startsWith('image/') || file.type.startsWith('video/')

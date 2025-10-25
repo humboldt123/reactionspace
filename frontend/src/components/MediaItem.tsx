@@ -117,7 +117,7 @@ export function MediaItem({ item, onDragStart, onDragMove, onDragEnd, onClick, i
       animationRef.current = requestAnimationFrame(animate);
 
       return () => {
-        if (animationRef.current) {
+        if (animationRef.current !== undefined) {
           cancelAnimationFrame(animationRef.current);
         }
       };
