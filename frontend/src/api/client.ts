@@ -1,8 +1,8 @@
 import type { MediaItem } from '../types';
 import { supabase } from '../lib/supabase';
 
-const API_BASE = 'http://localhost:8000/api';
-const BACKEND_URL = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const BACKEND_URL = API_BASE.replace('/api', '');
 
 // Helper to get auth headers
 async function getAuthHeaders(): Promise<HeadersInit> {
