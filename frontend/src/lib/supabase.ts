@@ -11,7 +11,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'pkce',
+    // Temporarily use implicit flow - PKCE has issues in production
+    // TODO: Debug PKCE - works on localhost but fails with 401 in production
+    flowType: 'implicit',
     storage: window.localStorage,
     storageKey: 'sb-auth',
   },
