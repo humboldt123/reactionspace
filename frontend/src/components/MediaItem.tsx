@@ -23,7 +23,7 @@ export function MediaItem({ item, onDragStart, onDragMove, onDragEnd, onClick, i
   const [isDragging, setIsDragging] = useState(false);
   const groupRef = useRef<Konva.Group>(null);
   const imageRef = useRef<Konva.Image>(null);
-  const animationRef = useRef<number | undefined>();
+  const animationRef = useRef<number | undefined>(undefined);
 
   // Set offset to center on mount so all scaling happens from center
   useEffect(() => {
