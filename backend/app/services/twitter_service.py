@@ -135,7 +135,7 @@ class TwitterService:
 
                         if tweet_text and isinstance(tweet_text, str):
                             print(f"Successfully extracted tweet text: {tweet_text[:100]}...")
-                            return tweet_text
+                            return TwitterService.clean_tweet_text(tweet_text)
                     except json.JSONDecodeError as je:
                         # Skip this line if it's not valid JSON
                         continue
@@ -157,7 +157,7 @@ class TwitterService:
                     tweet_text = data.get('description') or data.get('title')
                     if tweet_text and isinstance(tweet_text, str):
                         print(f"Successfully extracted tweet text via yt-dlp: {tweet_text[:100]}...")
-                        return tweet_text
+                        return TwitterService.clean_tweet_text(tweet_text)
                 except json.JSONDecodeError:
                     pass
 
@@ -167,6 +167,38 @@ class TwitterService:
             print(f"Failed to extract tweet text: {e}")
 
         return None
+
+    @staticmethod
+    def clean_tweet_text(text: str) -> str:
+        """
+        Clean up tweet text by removing t.co links and HTML entities.
+
+        Args:
+            text: Raw tweet text
+
+        Returns:
+            Cleaned tweet text
+        """
+        import re
+        import html
+
+        if not text:
+            return text
+
+        # Decode HTML entities (e.g., &gt; -> >, &lt; -> <, &amp; -> &)
+        text = html.unescape(text)
+
+        # Remove t.co shortened links
+        text = re.sub(r'https?://t\.co/\w+', '', text)
+
+        # Remove any standalone pic.twitter.com links
+        text = re.sub(r'https?://pic\.twitter\.com/\w+', '', text)
+
+        # Clean up extra whitespace
+        text = re.sub(r'\s+', ' ', text)
+        text = text.strip()
+
+        return text
 
     @staticmethod
     def download_from_twitter(url: str) -> List[Tuple[str, str, str, Optional[str]]]:

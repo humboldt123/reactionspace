@@ -81,7 +81,14 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
     bounds.maxX += padding;
     bounds.maxY += padding;
 
-    return spatialIndex.search(bounds);
+    const searchResults = spatialIndex.search(bounds);
+
+    // Sort by creation time to ensure consistent layering (older items render first, newer on top)
+    return searchResults.sort((a, b) => {
+      const timeA = new Date(a.createdAt || 0).getTime();
+      const timeB = new Date(b.createdAt || 0).getTime();
+      return timeA - timeB;
+    });
   }, [canvasState, items, spatialIndex]);
 
   // Set up wheel event listener for zooming
@@ -326,6 +333,10 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
   const gridSize = 40 * gridScale;
   const gridOpacity = Math.max(0.1, 1 - (canvasState.scale - 1) * 0.5); // and fade as zoom increases
 
+  // Calculate grid offset to align with canvas position
+  const gridOffsetX = (canvasState.x % gridSize);
+  const gridOffsetY = (canvasState.y % gridSize);
+
   return (
     <div
       ref={containerRef}
@@ -340,7 +351,7 @@ export function InfiniteCanvas({ items, onItemDragEnd, onItemClick, deletingItem
           linear-gradient(rgba(42, 42, 42, ${gridOpacity}) 1px, transparent 1px)
         `,
         backgroundSize: `${gridSize}px ${gridSize}px`,
-        backgroundPosition: 'center center',
+        backgroundPosition: `${gridOffsetX}px ${gridOffsetY}px`,
       }}
     >
       <Stage

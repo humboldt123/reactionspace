@@ -54,6 +54,9 @@ function App() {
   const isMobile = useIsMobile();
   const { user, signOut } = useAuth();
 
+  // Detect platform for keyboard shortcuts
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
   // Load config, items, and storage on mount
   useEffect(() => {
     // Fetch config
@@ -531,6 +534,7 @@ function App() {
               bottom: 0,
               backgroundColor: 'rgba(0, 0, 0, 0.5)',
               zIndex: 2000,
+              animation: 'fadeIn 0.2s ease-out',
             }}
           />
 
@@ -549,6 +553,7 @@ function App() {
               padding: '20px',
               zIndex: 2001,
               boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+              animation: 'scaleIn 0.2s ease-out',
             }}
           >
             <h3 style={{ marginTop: 0, fontSize: '1.1em' }}>
@@ -572,12 +577,71 @@ function App() {
         </>
       )}
 
+      {/* Keyboard Shortcuts Indicator */}
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 20,
+          left: 20,
+          padding: '10px 14px',
+          backgroundColor: 'var(--bg-secondary)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          zIndex: 99,
+          fontSize: '0.75em',
+          color: 'var(--text-secondary)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <kbd style={{
+            padding: '2px 5px',
+            backgroundColor: 'var(--bg-tertiary)',
+            border: '1px solid var(--border)',
+            borderRadius: 3,
+            fontSize: '0.9em',
+            fontFamily: 'monospace',
+          }}>
+            {isMac ? '⌘K' : 'Ctrl+K'}
+          </kbd>
+          <span>Search</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <kbd style={{
+            padding: '2px 5px',
+            backgroundColor: 'var(--bg-tertiary)',
+            border: '1px solid var(--border)',
+            borderRadius: 3,
+            fontSize: '0.9em',
+            fontFamily: 'monospace',
+          }}>
+            {isMac ? '⌘V' : 'Ctrl+V'}
+          </kbd>
+          <span>Paste</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <kbd style={{
+            padding: '2px 5px',
+            backgroundColor: 'var(--bg-tertiary)',
+            border: '1px solid var(--border)',
+            borderRadius: 3,
+            fontSize: '0.9em',
+            fontFamily: 'monospace',
+          }}>
+            Enter
+          </kbd>
+          <span>Upload from URL</span>
+        </div>
+      </div>
+
       {/* Upload Queue Status */}
       {(uploadQueue.length > 0 || twitterUploadStatus) && (
         <div
           style={{
             position: 'fixed',
-            bottom: 20,
+            bottom: 140,
             left: 20,
             padding: '12px 16px',
             backgroundColor: 'var(--bg-secondary)',
@@ -724,7 +788,7 @@ function App() {
                 borderRadius: 4,
               }}
             >
-              ⌘K
+              {isMac ? '⌘K' : 'Ctrl+K'}
             </kbd>
           </button>
           <AuthButton onAccountClick={() => setShowAccountSettings(true)} />

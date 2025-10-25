@@ -156,6 +156,7 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
           bottom: 0,
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           zIndex: 200,
+          animation: 'fadeIn 0.2s ease-out',
         }}
       />
 
@@ -164,7 +165,7 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
         style={{
           position: 'fixed',
           top: 20,
-          right: 20,
+          left: 20,
           width: '350px',
           maxHeight: 'calc(100vh - 40px)',
           backgroundColor: 'var(--bg-secondary)',
@@ -175,6 +176,7 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
+          animation: 'slideInFromLeft 0.3s ease-out',
         }}
       >
         {/* Close button */}
@@ -183,7 +185,7 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
           style={{
             position: 'absolute',
             top: 10,
-            right: 10,
+            left: 10,
             width: 24,
             height: 24,
             padding: 0,
@@ -270,17 +272,18 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
                 position: 'absolute',
                 bottom: 10,
                 right: 10,
-                width: 32,
-                height: 32,
+                width: 28,
+                height: 28,
                 padding: 0,
                 backgroundColor: 'rgba(0, 0, 0, 0.7)',
                 backdropFilter: 'blur(4px)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                borderRadius: 4,
               }}
             >
-              <FaDownload size={16} />
+              <FaDownload size={12} />
             </button>
           )}
         </div>
@@ -489,6 +492,7 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
             padding: '20px',
             zIndex: 202,
             boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+            animation: 'scaleIn 0.2s ease-out',
           }}
         >
           <h3 style={{ marginTop: 0, fontSize: '1.1em' }}>Delete Reaction?</h3>
@@ -521,6 +525,7 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
             border: '1px solid var(--border)',
             borderRadius: 8,
             padding: '20px',
+            animation: 'scaleIn 0.2s ease-out',
             zIndex: 202,
             boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
           }}

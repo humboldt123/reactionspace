@@ -28,6 +28,10 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
 
     const handleDragOver = (e: DragEvent) => {
       e.preventDefault();
+      // Ensure dropEffect is set to 'copy' for better cross-platform support
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
     };
 
     const handleDrop = async (e: DragEvent) => {
@@ -35,9 +39,20 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
       setIsDragging(false);
       dragCounter = 0;
 
-      const files = Array.from(e.dataTransfer?.files || []).filter((file) =>
-        file.type.startsWith('image/') || file.type.startsWith('video/')
-      );
+      // Only process if we have actual files (not just text/uri-list which happens on Linux)
+      if (!e.dataTransfer?.files || e.dataTransfer.files.length === 0) {
+        console.log('No files in drop event, only text/uri-list');
+        return;
+      }
+
+      const files = Array.from(e.dataTransfer.files).filter((file) => {
+        // Ensure we have actual File objects with valid types
+        if (!file.type) {
+          console.log(`Skipping file without type: ${file.name}`);
+          return false;
+        }
+        return file.type.startsWith('image/') || file.type.startsWith('video/');
+      });
 
       if (files.length > 0) {
         await onUpload(files);
