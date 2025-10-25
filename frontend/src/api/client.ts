@@ -8,9 +8,6 @@ const BACKEND_URL = API_BASE.replace('/api', '');
 async function getAuthHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
 
-  console.log('[API Client] Getting auth headers, session:', session ? 'exists' : 'null');
-  console.log('[API Client] Access token:', session?.access_token ? 'exists (length: ' + session.access_token.length + ')' : 'null');
-
   if (session?.access_token) {
     return {
       'Authorization': `Bearer ${session.access_token}`,
