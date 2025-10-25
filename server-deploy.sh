@@ -213,7 +213,14 @@ setup_ssl() {
     read -p "Enter your email for SSL notifications: " email
     read -p "Press Enter to continue or Ctrl+C to cancel..."
 
+    # Make sure services are running (nginx needs to be up for webroot challenge)
+    print_status "Ensuring services are running..."
+    docker compose up -d
+
+    sleep 3
+
     # Obtain certificate
+    print_status "Obtaining SSL certificate from Let's Encrypt..."
     docker compose run --rm certbot certonly \
         --webroot \
         --webroot-path=/var/www/certbot \
@@ -223,12 +230,31 @@ setup_ssl() {
         -d reactionspace.app \
         -d www.reactionspace.app
 
-    print_status "SSL certificate obtained!"
-    print_warning "Now you need to enable HTTPS in nginx config:"
-    echo "  1. Edit nginx/sites-enabled/reactionspace.conf"
-    echo "  2. Uncomment the HTTPS server block"
-    echo "  3. Comment out the HTTP-only block (keep HTTP redirect)"
-    echo "  4. Run: ./server-deploy.sh restart"
+    if [ $? -eq 0 ]; then
+        print_status "SSL certificate obtained successfully!"
+        echo ""
+        print_warning "Now you need to enable HTTPS in nginx config:"
+        echo "  1. Edit nginx/sites-enabled/reactionspace.conf"
+        echo "     nano nginx/sites-enabled/reactionspace.conf"
+        echo ""
+        echo "  2. Uncomment the HTTPS server block (the one with 'listen 443 ssl')"
+        echo "  3. Uncomment the HTTP to HTTPS redirect block at the top"
+        echo "  4. Comment out the temporary HTTP server block"
+        echo ""
+        echo "  5. Save and restart nginx:"
+        echo "     ./server-deploy.sh restart"
+        echo ""
+        print_status "After that, your site will be available at https://reactionspace.app"
+    else
+        print_error "Failed to obtain SSL certificate!"
+        echo ""
+        print_warning "Common issues:"
+        echo "  - DNS not pointing to this server yet (check with: ping reactionspace.app)"
+        echo "  - Port 80 not accessible (check firewall: sudo ufw status)"
+        echo "  - Nginx not running (check: docker compose ps)"
+        echo ""
+        echo "Fix the issue and run: ./server-deploy.sh ssl"
+    fi
 }
 
 # Main script logic
