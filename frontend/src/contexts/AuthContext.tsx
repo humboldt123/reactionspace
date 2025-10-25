@@ -18,6 +18,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Debug: Check localStorage
+    console.log('[AuthContext] LocalStorage keys:', Object.keys(localStorage));
+    console.log('[AuthContext] Current URL:', window.location.href);
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       console.log('[AuthContext] Initial session:', session);
@@ -32,6 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('[AuthContext] Auth state change:', event, session);
+      if (event === 'SIGNED_OUT') {
+        console.log('[AuthContext] User signed out - checking for errors in localStorage');
+      }
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
