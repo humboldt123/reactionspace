@@ -32,6 +32,7 @@ services:
     image: nginx:alpine
     container_name: reactionspace-nginx
     restart: unless-stopped
+    command: "/bin/sh -c 'while :; do sleep 6h && nginx -s reload; done & nginx -g \"daemon off;\"'"
     ports:
       - "80:80"
       - "443:443"
