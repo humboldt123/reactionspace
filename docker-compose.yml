@@ -18,7 +18,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-https://reactionspace.app/api}
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
-        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
     container_name: reactionspace-frontend
     restart: unless-stopped
     expose:

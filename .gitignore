@@ -7,6 +7,8 @@ reactions/
 # Production environment files
 backend/.env
 .env
+.env.production
+frontend/.env.production
 
 # SSL certificates and nginx logs
 certbot/
