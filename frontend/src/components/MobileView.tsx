@@ -211,8 +211,29 @@ export function MobileView({ items, onItemClick, onAccountClick }: MobileViewPro
 
 // Component for rendering individual media items in mobile view
 function MobileMediaItem({ item, onClick }: { item: MediaItem; onClick: () => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+
+  // Lazy load: only render media when scrolled into view
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect(); // Once visible, stay visible
+        }
+      },
+      { rootMargin: '200px' } // Start loading 200px before entering viewport
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // For videos, we want to show a preview (first second looping)
   const isVideo = item.fileType === 'video';
@@ -220,7 +241,7 @@ function MobileMediaItem({ item, onClick }: { item: MediaItem; onClick: () => vo
   const isGif = hasPreviewVideo && item.fileType !== 'video';
 
   useEffect(() => {
-    if (videoRef.current && (isVideo || isGif)) {
+    if (isVisible && videoRef.current && (isVideo || isGif)) {
       const video = videoRef.current;
 
       const handleCanPlay = () => {
@@ -249,10 +270,11 @@ function MobileMediaItem({ item, onClick }: { item: MediaItem; onClick: () => vo
         video.removeEventListener('canplay', handleCanPlay);
       };
     }
-  }, [isVideo, isGif]);
+  }, [isVideo, isGif, isVisible]);
 
   return (
     <div
+      ref={containerRef}
       onClick={onClick}
       style={{
         backgroundColor: 'var(--bg-secondary)',
@@ -285,7 +307,7 @@ function MobileMediaItem({ item, onClick }: { item: MediaItem; onClick: () => vo
           position: 'relative',
         }}
       >
-        {isVideo || isGif ? (
+        {isVisible && (isVideo || isGif) && (
           <video
             ref={videoRef}
             src={isGif ? item.previewVideoPath : item.filePath}
@@ -298,7 +320,8 @@ function MobileMediaItem({ item, onClick }: { item: MediaItem; onClick: () => vo
               objectFit: 'contain',
             }}
           />
-        ) : (
+        )}
+        {isVisible && !(isVideo || isGif) && (
           <img
             src={item.filePath}
             alt={item.name || 'Media item'}

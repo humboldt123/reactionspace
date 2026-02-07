@@ -21,6 +21,7 @@ export function MediaItem({ item, onDragStart, onDragMove, onDragEnd, onClick, i
   const [isLoading, setIsLoading] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const isGif = item.fileType === 'image' && !!item.previewVideoPath;
   const groupRef = useRef<Konva.Group>(null);
   const imageRef = useRef<Konva.Image>(null);
   const animationRef = useRef<number | undefined>(undefined);
@@ -68,6 +69,7 @@ export function MediaItem({ item, onDragStart, onDragMove, onDragEnd, onClick, i
       video.muted = true;
       video.loop = true;
       video.playsInline = true;
+      video.preload = 'auto';
 
       // For real videos (not GIF previews), play only the first second
       const isRealVideo = item.fileType === 'video';
@@ -84,8 +86,8 @@ export function MediaItem({ item, onDragStart, onDragMove, onDragEnd, onClick, i
         });
       }
 
-      video.addEventListener('canplay', () => {
-        video.play().catch(err => console.log('Video play failed:', err));
+      video.addEventListener('loadeddata', () => {
+        // Show first frame but don't play yet — hover will trigger playback
         setImage(video as any);
         setIsLoading(false);
         groupRef.current?.getLayer()?.batchDraw();
@@ -104,25 +106,35 @@ export function MediaItem({ item, onDragStart, onDragMove, onDragEnd, onClick, i
     }
   }, [item.filePath, item.previewVideoPath, item.fileType, item.width, item.height]);
 
-  // Animate video frames (includes GIF previews which are loaded as videos)
+  // Play/pause video and animate frames based on hover state
   useEffect(() => {
     if (image && image instanceof HTMLVideoElement) {
+      const video = image;
       const layer = groupRef.current?.getLayer();
 
-      const animate = () => {
-        layer?.batchDraw();
+      if (isHovered) {
+        video.play().catch(err => console.log('Video play failed:', err));
+        const animate = () => {
+          layer?.batchDraw();
+          animationRef.current = requestAnimationFrame(animate);
+        };
         animationRef.current = requestAnimationFrame(animate);
-      };
-
-      animationRef.current = requestAnimationFrame(animate);
+      } else {
+        video.pause();
+        if (animationRef.current !== undefined) {
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = undefined;
+        }
+      }
 
       return () => {
         if (animationRef.current !== undefined) {
           cancelAnimationFrame(animationRef.current);
+          animationRef.current = undefined;
         }
       };
     }
-  }, [image]);
+  }, [image, isHovered]);
 
   // Deletion animation effect
   useEffect(() => {
@@ -294,6 +306,35 @@ export function MediaItem({ item, onDragStart, onDragMove, onDragEnd, onClick, i
           shadowBlur={isHovered ? 20 : 0}
           shadowOpacity={isHovered ? 0.5 : 0}
         />
+      )}
+
+      {/* GIF badge */}
+      {isGif && (
+        <>
+          <Rect
+            x={4}
+            y={4}
+            width={28}
+            height={14}
+            fill="rgba(0, 0, 0, 0.6)"
+            cornerRadius={3}
+            listening={false}
+          />
+          <Text
+            text="GIF"
+            x={4}
+            y={4}
+            width={28}
+            height={14}
+            fontSize={9}
+            fontFamily="monospace"
+            fontStyle="bold"
+            fill="#ffffff"
+            align="center"
+            verticalAlign="middle"
+            listening={false}
+          />
+        </>
       )}
 
       {/* Label in corner on hover */}

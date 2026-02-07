@@ -28,6 +28,9 @@ upload_lock = asyncio.Lock()
 class TwitterUploadRequest(BaseModel):
     url: str
 
+class SocialUploadRequest(BaseModel):
+    url: str
+
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_media(
@@ -458,24 +461,37 @@ async def upload_from_twitter(
             mp4_preview_path = None
             mp4_preview_size = 0
 
-            # Check if this is a Twitter GIF (which is stored as MP4)
-            # Twitter GIFs are typically short, looping MP4s
-            # We'll convert MP4 videos to GIFs if they're short enough (< 10 seconds)
+            # Check if this is a Twitter/social media GIF (served as MP4)
+            # Real GIFs have NO audio track, while real videos do.
+            # Also check duration as a safety cap (GIFs are typically < 30s).
             is_twitter_gif = False
             if file_type == "video" and content_type == "video/mp4":
                 try:
+                    # Check for audio track using ffprobe
+                    probe_result = subprocess.run(
+                        ['ffprobe', '-v', 'quiet', '-select_streams', 'a',
+                         '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', temp_path],
+                        capture_output=True, text=True
+                    )
+                    has_audio = bool(probe_result.stdout.strip())
+
+                    # Also check duration as safety cap
                     video = cv2.VideoCapture(temp_path)
                     fps = video.get(cv2.CAP_PROP_FPS)
                     frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
                     duration = frame_count / fps if fps > 0 else 0
                     video.release()
 
-                    # If video is short (< 10 seconds), treat it as a GIF
-                    if duration < 10:
-                        print(f"Video is {duration:.2f}s, converting to GIF")
+                    # No audio + short duration = GIF
+                    if not has_audio and duration < 30:
+                        print(f"Video is {duration:.2f}s with no audio, treating as GIF")
                         is_twitter_gif = True
+                    elif not has_audio:
+                        print(f"Video has no audio but is {duration:.2f}s, treating as video")
+                    else:
+                        print(f"Video has audio ({duration:.2f}s), treating as video")
                 except Exception as e:
-                    print(f"Failed to check video duration: {e}")
+                    print(f"Failed to check video properties: {e}")
 
             # Convert MP4 to GIF if it's a Twitter GIF
             if is_twitter_gif:
@@ -511,7 +527,7 @@ async def upload_from_twitter(
 
                 # Append tweet text to description if available
                 if tweet_text:
-                    ai_caption["description"] = f"{ai_caption['description']} - Tweet: {tweet_text}"
+                    ai_caption["description"] = tweet_text
             else:
                 # For videos, extract 3 random frames and analyze them
                 try:
@@ -564,7 +580,7 @@ async def upload_from_twitter(
 
                 # Append tweet text to description if available
                 if tweet_text:
-                    ai_caption["description"] = f"{ai_caption['description']} - Tweet: {tweet_text}"
+                    ai_caption["description"] = tweet_text
 
             # Generate text embedding from name + description + keywords
             text_for_embedding = f"{ai_caption['name']} {ai_caption['description']} {ai_caption['keywords']}"
@@ -725,3 +741,292 @@ async def upload_from_twitter(
             print(f"Warning: Failed to clean up uploaded files: {cleanup_error}")
 
         raise HTTPException(status_code=500, detail=f"Twitter upload failed: {str(e)}")
+
+
+@router.post("/upload/social", response_model=UploadResponse)
+async def upload_from_social(
+    request: SocialUploadRequest,
+    user_id: Optional[str] = Depends(get_current_user_id)
+):
+    """
+    Download and upload media from a social media link (Twitter/X or Instagram).
+    Auto-detects the platform from the URL.
+    """
+    url = request.url.strip()
+
+    if TwitterService.is_twitter_url(url):
+        return await upload_from_twitter(
+            TwitterUploadRequest(url=url),
+            user_id=user_id
+        )
+    elif TwitterService.is_instagram_url(url):
+        return await upload_from_instagram_reel(
+            SocialUploadRequest(url=url),
+            user_id=user_id
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported URL. Please provide a Twitter/X or Instagram link.")
+
+
+@router.post("/upload/instagram", response_model=UploadResponse)
+async def upload_from_instagram_reel(
+    request: SocialUploadRequest,
+    user_id: Optional[str] = Depends(get_current_user_id)
+):
+    """Download and upload media from an Instagram Reel link."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    is_pro = await supabase_service.is_user_pro(user_id)
+    max_file_size = settings.MAX_FILE_SIZE_PRO if is_pro else settings.MAX_FILE_SIZE
+    storage_limit = settings.STORAGE_LIMIT_PRO if is_pro else settings.STORAGE_LIMIT
+
+    temp_path = None
+    gif_path = None
+
+    try:
+        print(f"Downloading from Instagram: {request.url}")
+
+        # Download from Instagram
+        downloaded_files = TwitterService.download_from_instagram(request.url)
+
+        if not downloaded_files:
+            raise HTTPException(status_code=400, detail="No media found at this Instagram URL")
+
+        print(f"Downloaded {len(downloaded_files)} file(s) from Instagram")
+
+        # Check file sizes
+        total_size = 0
+        for temp_path_check, _, _, _ in downloaded_files:
+            if os.path.exists(temp_path_check):
+                file_size = os.path.getsize(temp_path_check)
+                total_size += file_size
+                if file_size > max_file_size:
+                    max_size_mb = max_file_size / (1024 * 1024)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum size is {max_size_mb:.0f}MB for {'Pro' if is_pro else 'Free'} accounts."
+                    )
+
+        # Check storage limits
+        storage_info = await get_storage_info_internal(user_id)
+
+        global_used_bytes = storage_info.get('global_used_bytes', 0)
+        if global_used_bytes + total_size > settings.GLOBAL_STORAGE_WARNING:
+            global_used_gb = global_used_bytes / (1024 * 1024 * 1024)
+            raise HTTPException(
+                status_code=507,
+                detail=f"Supabase storage limit reached ({global_used_gb:.2f}GB used)."
+            )
+
+        if storage_info['used_bytes'] + total_size > storage_limit:
+            used_mb = storage_info['used_bytes'] / (1024 * 1024)
+            limit_mb = storage_limit / (1024 * 1024)
+            raise HTTPException(
+                status_code=413,
+                detail=f"Storage limit exceeded. You're using {used_mb:.1f}MB of {limit_mb:.0f}MB."
+            )
+
+        # Process the first file (Instagram Reels are single videos)
+        temp_path, file_type, content_type, caption = downloaded_files[0]
+
+        gif_path = None
+        mp4_preview_path = None
+        mp4_preview_size = 0
+
+        # Check if this is a GIF (no audio + short duration)
+        is_instagram_gif = False
+        if file_type == "video" and content_type == "video/mp4":
+            try:
+                probe_result = subprocess.run(
+                    ['ffprobe', '-v', 'quiet', '-select_streams', 'a',
+                     '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', temp_path],
+                    capture_output=True, text=True
+                )
+                has_audio = bool(probe_result.stdout.strip())
+
+                video = cv2.VideoCapture(temp_path)
+                fps = video.get(cv2.CAP_PROP_FPS)
+                frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+                duration = frame_count / fps if fps > 0 else 0
+                video.release()
+
+                if not has_audio and duration < 30:
+                    print(f"Instagram video is {duration:.2f}s with no audio, treating as GIF")
+                    is_instagram_gif = True
+            except Exception as e:
+                print(f"Failed to check video properties: {e}")
+
+        if is_instagram_gif:
+            try:
+                gif_path = TwitterService.convert_mp4_to_gif(temp_path)
+                mp4_preview_path = temp_path
+                temp_path = gif_path
+                file_type = "image"
+                content_type = "image/gif"
+            except Exception as e:
+                print(f"Warning: Failed to convert to GIF: {e}")
+                mp4_preview_path = None
+
+        # Get dimensions
+        actual_width, actual_height = TwitterService.get_media_dimensions(temp_path, file_type)
+        display_width, display_height = calculate_aspect_ratio(actual_width, actual_height)
+
+        # Read file data
+        with open(temp_path, "rb") as f:
+            file_data = f.read()
+
+        # AI caption
+        if file_type == "image":
+            ai_caption = await OpenAIService.generate_caption_from_image(temp_path, file_type)
+        else:
+            try:
+                import random
+
+                video = cv2.VideoCapture(temp_path)
+                total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+
+                if total_frames < 1:
+                    raise Exception("Video has no frames")
+
+                num_frames = min(3, total_frames)
+                frame_indices = random.sample(range(total_frames), num_frames)
+                frame_indices.sort()
+
+                frame_paths = []
+                file_id_temp = str(uuid.uuid4())
+                for idx in frame_indices:
+                    video.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                    success, frame = video.read()
+                    if success:
+                        frame_path = f"/tmp/{file_id_temp}_frame_{idx}.jpg"
+                        cv2.imwrite(frame_path, frame)
+                        frame_paths.append(frame_path)
+
+                video.release()
+
+                if not frame_paths:
+                    raise Exception("Failed to extract any video frames")
+
+                ai_caption = await OpenAIService.generate_caption_from_video_frames(frame_paths, file_type)
+
+                for frame_path in frame_paths:
+                    os.remove(frame_path)
+
+            except Exception as e:
+                print(f"Video frame extraction error: {e}")
+                ai_caption = {
+                    "name": "Instagram Reel",
+                    "description": "A video from Instagram",
+                    "keywords": "instagram reel video clip"
+                }
+
+        # Use Instagram caption as description if available
+        if caption:
+            ai_caption["description"] = caption
+
+        # Generate embedding
+        text_for_embedding = f"{ai_caption['name']} {ai_caption['description']} {ai_caption['keywords']}"
+        embedding = await OpenAIService.generate_text_embedding(text_for_embedding)
+
+        # Upload to Supabase storage
+        file_id = str(uuid.uuid4())
+        file_ext = content_type.split('/')[-1]
+        if file_ext == 'jpeg':
+            file_ext = 'jpg'
+        file_name = f"{file_id}.{file_ext}"
+
+        storage_path = f"reactions/{file_name}"
+        file_url = await supabase_service.upload_file(
+            storage_path,
+            file_data,
+            content_type
+        )
+
+        # Upload MP4 preview for converted GIFs
+        preview_video_url = None
+        if mp4_preview_path and os.path.exists(mp4_preview_path):
+            try:
+                with open(mp4_preview_path, 'rb') as f:
+                    mp4_data = f.read()
+                    mp4_preview_size = len(mp4_data)
+
+                preview_storage_path = f"reactions/{file_id}.mp4"
+                preview_video_url = await supabase_service.upload_file(
+                    preview_storage_path,
+                    mp4_data,
+                    "video/mp4"
+                )
+                print(f"Uploaded MP4 preview to: {preview_video_url} ({mp4_preview_size} bytes)")
+            except Exception as e:
+                print(f"Warning: Failed to upload MP4 preview: {e}")
+                mp4_preview_size = 0
+
+        # CRITICAL SECTION: Use lock to prevent race conditions
+        async with upload_lock:
+            all_embeddings_data = await supabase_service.get_all_embeddings(user_id)
+            all_embeddings = [e["vector"] for e in all_embeddings_data]
+
+            expected_dim = len(embedding)
+            valid_embeddings = []
+
+            for i, emb in enumerate(all_embeddings):
+                if isinstance(emb, list) and len(emb) == expected_dim:
+                    valid_embeddings.append(emb)
+
+            valid_embeddings.append(embedding)
+
+            print(f"Processing {len(valid_embeddings)} valid embeddings (expected dim: {expected_dim})")
+
+            positions = UMAPService.compute_2d_positions(valid_embeddings)
+            new_position = positions[-1]
+
+            total_file_size = len(file_data) + mp4_preview_size
+            item_create = MediaItemCreate(
+                name=ai_caption["name"],
+                description=ai_caption["description"],
+                keywords=ai_caption["keywords"],
+                file_path=file_url,
+                thumbnail_path=file_url,
+                preview_video_path=preview_video_url,
+                file_type=file_type,
+                file_size=total_file_size,
+                x=new_position[0],
+                y=new_position[1],
+                width=display_width,
+                height=display_height,
+                user_id=user_id
+            )
+
+            item = await supabase_service.create_item(item_create)
+            await supabase_service.store_embedding(item.id, embedding)
+
+        # Clean up temp files
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+        if gif_path and gif_path != temp_path and os.path.exists(gif_path):
+            os.remove(gif_path)
+        if mp4_preview_path and mp4_preview_path != temp_path and os.path.exists(mp4_preview_path):
+            os.remove(mp4_preview_path)
+
+        return UploadResponse(
+            item=item,
+            message="Successfully uploaded from Instagram"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Instagram upload error for URL {request.url}:")
+        print(traceback.format_exc())
+
+        # Clean up temp files
+        try:
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+            if gif_path and os.path.exists(gif_path):
+                os.remove(gif_path)
+        except:
+            pass
+
+        raise HTTPException(status_code=500, detail=f"Instagram upload failed: {str(e)}")

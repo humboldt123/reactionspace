@@ -10,7 +10,15 @@ import cv2
 
 
 class TwitterService:
-    """Service for downloading media from Twitter/X links"""
+    """Service for downloading media from Twitter/X and Instagram links"""
+
+    @staticmethod
+    def is_twitter_url(url: str) -> bool:
+        return any(domain in url.lower() for domain in ['twitter.com', 'x.com'])
+
+    @staticmethod
+    def is_instagram_url(url: str) -> bool:
+        return 'instagram.com' in url.lower()
 
     @staticmethod
     def normalize_twitter_url(url: str) -> str:
@@ -442,3 +450,192 @@ class TwitterService:
         except Exception as e:
             print(f"Failed to get media dimensions: {e}")
             return 200, 200  # Default fallback
+
+    @staticmethod
+    def _extract_instagram_id(url: str) -> str:
+        """Extract the post/reel shortcode from an Instagram URL."""
+        import re
+        # Match /p/CODE/, /reel/CODE/, /reels/CODE/
+        match = re.search(r'/(?:p|reel|reels)/([A-Za-z0-9_-]+)', url)
+        if match:
+            return match.group(1)
+        raise ValueError(f"Could not extract Instagram post ID from: {url}")
+
+    @staticmethod
+    def _instagram_graphql(post_id: str) -> Optional[dict]:
+        """
+        Fetch Instagram media info by scraping the post page with browser TLS.
+        Uses curl_cffi to impersonate Chrome's TLS fingerprint, which causes
+        Instagram to embed the media data directly in the HTML response.
+        Returns a dict with keys: is_video, video_url, display_url, caption.
+        """
+        import re as _re
+        from curl_cffi.requests import Session as CffiSession
+
+        try:
+            session = CffiSession(impersonate="chrome124")
+            resp = session.get(
+                f"https://www.instagram.com/p/{post_id}/",
+                timeout=20
+            )
+            if resp.status_code != 200:
+                print(f"Instagram page returned {resp.status_code}")
+                return None
+
+            text = resp.text
+
+            # Check if video data is embedded in the page
+            if "video_versions" not in text and "display_url" not in text:
+                print("No media data found in Instagram page")
+                return None
+
+            # Extract video URLs with dimensions
+            is_video = "video_versions" in text
+            video_url = ""
+            display_url = ""
+
+            if is_video:
+                dims = _re.findall(
+                    r'"width":(\d+),"height":(\d+),"url":"(https:[^"]+\.mp4[^"]*?)"',
+                    text
+                )
+                if dims:
+                    best_area = 0
+                    for w_str, h_str, url_raw in dims:
+                        url = url_raw.replace("\\/", "/").replace("\\u0026", "&")
+                        area = int(w_str) * int(h_str)
+                        if area > best_area:
+                            best_area = area
+                            video_url = url
+
+            # Extract display/image URL
+            display_match = _re.search(
+                r'"display_url":"(https:[^"]+)"',
+                text
+            )
+            if display_match:
+                display_url = display_match.group(1).replace("\\/", "/").replace("\\u0026", "&")
+
+            if not video_url and not display_url:
+                print("Could not extract media URLs from Instagram page")
+                return None
+
+            # Extract caption
+            caption = ""
+            cap_match = _re.search(r'"caption":\{[^}]*"text":"([^"]*)"', text)
+            if cap_match:
+                caption = cap_match.group(1).replace("\\n", "\n").replace("\\/", "/")
+
+            print(f"Instagram scrape success: is_video={is_video}, has_url={bool(video_url or display_url)}")
+            return {
+                "is_video": is_video,
+                "video_url": video_url,
+                "display_url": display_url,
+                "caption": caption,
+            }
+        except Exception as e:
+            print(f"Instagram scrape failed: {e}")
+            import traceback
+            traceback.print_exc()
+
+        return None
+
+    @staticmethod
+    def download_from_instagram(url: str) -> List[Tuple[str, str, str, Optional[str]]]:
+        """
+        Download media from an Instagram URL using mobile API (cobalt-style).
+        Falls back to yt-dlp if the API approach fails.
+        """
+        try:
+            print(f"Downloading Instagram: {url}")
+            post_id = TwitterService._extract_instagram_id(url)
+            print(f"Instagram post ID: {post_id}")
+
+            temp_dir = tempfile.mkdtemp()
+            caption = None
+
+            # Try GraphQL API first (no auth needed for public posts)
+            media_info = TwitterService._instagram_graphql(post_id)
+
+            if media_info:
+                print("Using Instagram GraphQL API")
+                caption = media_info.get("caption", "")
+
+                if media_info.get("is_video") and media_info.get("video_url"):
+                    media_url = media_info["video_url"]
+                    file_ext = "mp4"
+                    file_type = "video"
+                    content_type = "video/mp4"
+                elif media_info.get("display_url"):
+                    media_url = media_info["display_url"]
+                    file_ext = "jpg"
+                    file_type = "image"
+                    content_type = "image/jpeg"
+                else:
+                    raise Exception("No video or image URL in GraphQL response")
+
+                # Download the media file
+                file_path = os.path.join(temp_dir, f"ig_download.{file_ext}")
+                resp = requests.get(media_url, stream=True, timeout=120)
+                resp.raise_for_status()
+                with open(file_path, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        f.write(chunk)
+
+                print(f"Downloaded via GraphQL: {file_path}")
+                return [(file_path, file_type, content_type, caption)]
+
+            # Fallback: try yt-dlp
+            print("GraphQL API failed, falling back to yt-dlp...")
+            output_template = os.path.join(temp_dir, 'ig_download.%(ext)s')
+
+            cmd = [
+                'yt-dlp',
+                '--no-playlist',
+                '-f', 'best',
+                '--output', output_template,
+                '--no-warnings',
+                url
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout
+                raise Exception(f"All download methods failed. yt-dlp: {error_msg}")
+
+            # Find downloaded files
+            downloaded_files = []
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    if any(file.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.webm']):
+                        downloaded_files.append(os.path.join(root, file))
+
+            if not downloaded_files:
+                raise Exception("No media downloaded from Instagram")
+
+            results = []
+            for downloaded_file in downloaded_files:
+                file_ext = downloaded_file.split('.')[-1].lower()
+
+                video_extensions = ['mp4', 'mov', 'avi', 'webm', 'mkv']
+                image_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+
+                if file_ext in video_extensions:
+                    file_type = "video"
+                    content_type = f"video/{file_ext}"
+                elif file_ext in image_extensions:
+                    file_type = "image"
+                    content_type = "image/jpeg" if file_ext in ('jpg', 'jpeg') else f"image/{file_ext}"
+                else:
+                    continue
+
+                results.append((downloaded_file, file_type, content_type, caption))
+
+            if not results:
+                raise Exception("No supported media files found from Instagram")
+
+            return results
+
+        except Exception as e:
+            raise Exception(f"Instagram download error: {str(e)}")

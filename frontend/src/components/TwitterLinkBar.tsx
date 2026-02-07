@@ -87,14 +87,14 @@ export function TwitterLinkBar({ isOpen, onClose, onSubmit, isLoading = false }:
             }}
           >
             <div style={{ marginBottom: '12px', color: 'var(--text-secondary)', fontSize: '0.9em' }}>
-              Paste a Twitter/X link to download and upload
+              Paste a Twitter/X or Instagram Reels link to download and upload
             </div>
             <input
               ref={inputRef}
               type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://twitter.com/... or https://x.com/..."
+              placeholder="https://x.com/... or https://instagram.com/reel/..."
               disabled={isLoading}
               style={{
                 width: '100%',

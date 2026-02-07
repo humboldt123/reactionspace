@@ -386,9 +386,9 @@ function App() {
       const textItem = Array.from(items).find(item => item.type === 'text/plain');
       if (textItem) {
         textItem.getAsString(async (text) => {
-          // Check if it's a Twitter/X URL
-          const twitterUrlPattern = /(https?:\/\/)?(www\.)?(twitter\.com|x\.com)\/[^\s]+/i;
-          if (twitterUrlPattern.test(text.trim())) {
+          // Check if it's a Twitter/X or Instagram URL
+          const socialUrlPattern = /(https?:\/\/)?(www\.)?(twitter\.com|x\.com|instagram\.com)\/[^\s]+/i;
+          if (socialUrlPattern.test(text.trim())) {
             e.preventDefault();
 
             if (!user) {
@@ -569,11 +569,11 @@ function App() {
             }}
           >
             <h3 style={{ marginTop: 0, fontSize: '1.1em' }}>
-              {pasteConfirm.type === 'twitter' ? 'Upload from Twitter?' : 'Upload Files?'}
+              {pasteConfirm.type === 'twitter' ? 'Upload from link?' : 'Upload Files?'}
             </h3>
             <p style={{ margin: '12px 0', color: 'var(--text-secondary)' }}>
               {pasteConfirm.type === 'twitter'
-                ? 'Download and upload media from this tweet?'
+                ? 'Download and upload media from this link?'
                 : `Upload ${pasteConfirm.count} file${pasteConfirm.count === 1 ? '' : 's'} from clipboard?`}
             </p>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -652,9 +652,9 @@ function App() {
               {twitterUploadStatus.status === 'completed' && <div style={{ color: '#4ade80' }}>✓</div>}
               {twitterUploadStatus.status === 'error' && <div style={{ color: '#ef4444' }}>✗</div>}
               <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {twitterUploadStatus.status === 'downloading' && 'Downloading from Twitter...'}
-                {twitterUploadStatus.status === 'uploading' && 'Uploading from Twitter...'}
-                {twitterUploadStatus.status === 'completed' && 'Twitter media uploaded'}
+                {twitterUploadStatus.status === 'downloading' && 'Downloading...'}
+                {twitterUploadStatus.status === 'uploading' && 'Uploading...'}
+                {twitterUploadStatus.status === 'completed' && 'Media uploaded'}
                 {twitterUploadStatus.status === 'error' && `Error: ${twitterUploadStatus.error}`}
               </div>
             </div>

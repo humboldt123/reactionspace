@@ -30,6 +30,11 @@ class MediaItemUpdate(BaseModel):
     x: Optional[float] = None
     y: Optional[float] = None
     manual_cluster_id: Optional[str] = None
+    file_path: Optional[str] = None
+    thumbnail_path: Optional[str] = None
+    preview_video_path: Optional[str] = None
+    file_type: Optional[str] = None
+    file_size: Optional[int] = None
 
 
 class MediaItem(MediaItemBase):

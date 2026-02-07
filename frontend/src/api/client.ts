@@ -38,6 +38,16 @@ function normalizeItem(item: any): MediaItem {
   };
 }
 
+export interface VideoAnalysis {
+  bars_detected: boolean;
+  crop_top: number;
+  crop_bottom: number;
+  preview_image: string;
+  extracted_caption: string;
+  original_width: number;
+  original_height: number;
+}
+
 export const api = {
   async getConfig(): Promise<{ demo_mode: boolean; supabase_configured: boolean }> {
     const res = await fetch(`${API_BASE}/config`);
@@ -160,9 +170,13 @@ export const api = {
   },
 
   async uploadFromTwitter(url: string): Promise<{ item: MediaItem; message: string }> {
+    return this.uploadFromSocial(url);
+  },
+
+  async uploadFromSocial(url: string): Promise<{ item: MediaItem; message: string }> {
     const authHeaders = await getAuthHeaders();
 
-    const res = await fetch(`${API_BASE}/upload/twitter`, {
+    const res = await fetch(`${API_BASE}/upload/social`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -172,8 +186,14 @@ export const api = {
     });
 
     if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.detail || 'Twitter upload failed');
+      let detail = 'Upload failed';
+      try {
+        const error = await res.json();
+        detail = error.detail || detail;
+      } catch {
+        detail = await res.text() || `Upload failed (${res.status})`;
+      }
+      throw new Error(detail);
     }
 
     const data = await res.json();
@@ -181,6 +201,79 @@ export const api = {
       ...data,
       item: normalizeItem(data.item),
     };
+  },
+
+  async analyzeVideo(id: string): Promise<VideoAnalysis> {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/items/${id}/analyze-video`, {
+      method: 'POST',
+      headers: authHeaders,
+    });
+
+    if (!res.ok) {
+      let detail = 'Analysis failed';
+      try {
+        const error = await res.json();
+        detail = error.detail || detail;
+      } catch {
+        detail = await res.text() || `Analysis failed (${res.status})`;
+      }
+      throw new Error(detail);
+    }
+
+    return await res.json();
+  },
+
+  async cropVideo(id: string, options: { crop_top: number; crop_bottom: number; crop_left?: number; crop_right?: number; caption?: string }): Promise<MediaItem> {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/items/${id}/crop-video`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify(options),
+    });
+
+    if (!res.ok) {
+      let detail = 'Crop failed';
+      try {
+        const error = await res.json();
+        detail = error.detail || detail;
+      } catch {
+        detail = await res.text() || `Crop failed (${res.status})`;
+      }
+      throw new Error(detail);
+    }
+
+    const data = await res.json();
+    return normalizeItem(data);
+  },
+
+  async convertToGif(id: string, options?: { crop_top?: number; crop_bottom?: number; caption?: string }): Promise<MediaItem> {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/items/${id}/convert-to-gif`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify(options || {}),
+    });
+
+    if (!res.ok) {
+      let detail = 'Conversion failed';
+      try {
+        const error = await res.json();
+        detail = error.detail || detail;
+      } catch {
+        detail = await res.text() || `Conversion failed (${res.status})`;
+      }
+      throw new Error(detail);
+    }
+
+    const data = await res.json();
+    return normalizeItem(data);
   },
 
   async deleteAccount(): Promise<{ message: string; items_deleted: number }> {
