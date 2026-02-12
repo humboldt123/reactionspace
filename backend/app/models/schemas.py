@@ -29,6 +29,8 @@ class MediaItemUpdate(BaseModel):
     keywords: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
     manual_cluster_id: Optional[str] = None
     file_path: Optional[str] = None
     thumbnail_path: Optional[str] = None

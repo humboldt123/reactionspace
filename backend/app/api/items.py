@@ -453,6 +453,8 @@ async def crop_video(
             thumbnail_path=thumb_url,
             file_type="video",
             file_size=len(mp4_data) + (len(thumbnail_data) if thumbnail_data else 0),
+            width=display_width,
+            height=display_height,
         )
         if request.caption:
             existing_desc = item.description or ""

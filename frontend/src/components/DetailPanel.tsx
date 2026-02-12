@@ -134,8 +134,9 @@ export function DetailPanel({ item, onClose, onUpdate, onDelete }: DetailPanelPr
       const response = await fetch(item.filePath);
       const blob = await response.blob();
 
-      // On iOS/mobile, use Web Share API so user can "Save to Photos"
-      if (navigator.share && navigator.canShare) {
+      // On iOS, use Web Share API so user can "Save to Photos"
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS && navigator.share && navigator.canShare) {
         const file = new File([blob], filename, { type: mimeType });
         if (navigator.canShare({ files: [file] })) {
           try {
